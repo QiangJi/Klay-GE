@@ -1,0 +1,285 @@
+<?xml version='1.0'?>
+
+<effect>
+	<shader>
+		<![CDATA[
+float get_x_channel(float4 v)
+{
+#ifdef KLAYGE_BC4_AS_G
+	return v.g;
+#else
+	return v.r;
+#endif
+}
+
+float2 get_xy_channel(float4 v)
+{
+#ifdef KLAYGE_BC5_AS_AG
+	return v.ag;
+#else
+#ifdef KLAYGE_BC5_AS_GA
+	return v.ga;
+#else
+	return v.rg;
+#endif
+#endif
+}
+
+float3 restore_normal(float2 normal_xy)
+{
+	float3 normal;
+	normal.xy = normal_xy;
+	normal.z = sqrt(max(0.0f, 1 - dot(normal.xy, normal.xy)));
+	return normalize(normal);
+}
+
+float3 decompress_normal(float4 comp_normal)
+{
+	return restore_normal(get_xy_channel(comp_normal) * 2 - 1);
+}
+
+float4 decode_hdr_yc(float y, float4 c)
+{
+	float Y = exp2(y * 65536 / 2048 - 16);
+	float2 C = get_xy_channel(c);
+	C *= C;
+	
+	return float4(Y * float3(C.g, (1.0f - C.g - C.r), C.r) / float3(0.2126f, 0.7152f, 0.0722f), 1);
+}
+
+float mipmap_level(float2 uv, float2 texture_size)
+{
+#if KLAYGE_DERIVATIVES
+	float2 dx = ddx(uv * texture_size.x);
+	float2 dy = ddy(uv * texture_size.y);
+	float d = max(dot(dx, dx), dot(dy, dy));
+
+	return log2(sqrt(d));
+#else
+	return 0;
+#endif
+}
+
+float non_linear_depth_to_linear(float depth, float near_mul_q, float q)
+{
+	return near_mul_q / (q - depth);
+}
+
+float linear_depth_to_non_linear(float depth, float near_mul_q, float q)
+{
+	return (depth * q - near_mul_q) / depth;
+}
+
+float3 linear_to_srgb(float3 rgb)
+{
+	const float ALPHA = 0.055f;
+	return rgb < 0.0031308f ? 12.92f * rgb : (1 + ALPHA) * pow(rgb, 1 / 2.4f) - ALPHA;
+}
+
+float3 srgb_to_linear(float3 srgb)
+{
+	const float ALPHA = 0.055f;
+	return srgb < 0.04045f ? srgb / 12.92f : pow((srgb + ALPHA) / (1 + ALPHA), 2.4f);
+}
+
+// Encoding a [0, 1) float into a rgba8. From http://aras-p.info/blog/2009/07/30/encoding-floats-to-rgba-the-final/
+float4 EncodeFloatRGBA(float v)
+{
+	float4 enc = float4(1.0f, 255.0f, 65025.0f, 16581375.0f) * v;
+	enc = frac(enc);
+	enc -= enc.yzww * float4(1 / 255.0f, 1 / 255.0f, 1 / 255.0f, 0);
+	return enc;
+}
+
+float DecodeFloatRGBA(float4 rgba)
+{
+	return dot(rgba, float4(1, 1 / 255.0f, 1 / 65025.0f, 1 / 16581375.0f));
+}
+
+
+#if KLAYGE_SHADER_MODEL < 5
+float mad(float mvalue, float avalue, float bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+float2 mad(float2 mvalue, float2 avalue, float2 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+float3 mad(float3 mvalue, float3 avalue, float3 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+float4 mad(float4 mvalue, float4 avalue, float4 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+
+float rcp(float v)
+{
+	return 1 / v;
+}
+float2 rcp(float2 v)
+{
+	return 1 / v;
+}
+float3 rcp(float3 v)
+{
+	return 1 / v;
+}
+float4 rcp(float4 v)
+{
+	return 1 / v;
+}
+
+#if KLAYGE_SHADER_MODEL >= 4
+uint countbits(uint v)
+{
+	v = v - ((v >> 1) & 0x55555555);
+	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
+	return (((v + (v >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+}
+uint2 countbits(uint2 v)
+{
+	v = v - ((v >> 1) & 0x55555555);
+	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
+	return (((v + (v >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+}
+uint3 countbits(uint3 v)
+{
+	v = v - ((v >> 1) & 0x55555555);
+	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
+	return (((v + (v >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+}
+uint4 countbits(uint4 v)
+{
+	v = v - ((v >> 1) & 0x55555555);
+	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
+	return (((v + (v >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+}
+
+uint firstbithigh(uint v)
+{
+	v |= (v >> 1);
+	v |= (v >> 2);
+	v |= (v >> 4);
+	v |= (v >> 8);
+	v |= (v >> 16);
+	return 32 - countbits(v);
+}
+uint2 firstbithigh(uint2 v)
+{
+	v |= (v >> 1);
+	v |= (v >> 2);
+	v |= (v >> 4);
+	v |= (v >> 8);
+	v |= (v >> 16);
+	return 32 - countbits(v);
+}
+uint3 firstbithigh(uint3 v)
+{
+	v |= (v >> 1);
+	v |= (v >> 2);
+	v |= (v >> 4);
+	v |= (v >> 8);
+	v |= (v >> 16);
+	return 32 - countbits(v);
+}
+uint4 firstbithigh(uint4 v)
+{
+	v |= (v >> 1);
+	v |= (v >> 2);
+	v |= (v >> 4);
+	v |= (v >> 8);
+	v |= (v >> 16);
+	return 32 - countbits(v);
+}
+
+uint firstbitlow(uint v)
+{
+	return countbits((v & ~(v - 1)) - 1);
+}
+uint2 firstbitlow(uint2 v)
+{
+	return countbits((v & ~(v - 1)) - 1);
+}
+uint3 firstbitlow(uint3 v)
+{
+	return countbits((v & ~(v - 1)) - 1);
+}
+uint4 firstbitlow(uint4 v)
+{
+	return countbits((v & ~(v - 1)) - 1);
+}
+
+int mad(int mvalue, int avalue, int bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+int2 mad(int2 mvalue, int2 avalue, int2 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+int3 mad(int3 mvalue, int3 avalue, int3 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+int4 mad(int4 mvalue, int4 avalue, int4 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+
+uint mad(uint mvalue, uint avalue, uint bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+uint2 mad(uint2 mvalue, uint2 avalue, uint2 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+uint3 mad(uint3 mvalue, uint3 avalue, uint3 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+uint4 mad(uint4 mvalue, uint4 avalue, uint4 bvalue)
+{
+	return mvalue * avalue + bvalue;
+}
+
+uint reverse(uint v)
+{
+	v = (((v & 0xAAAAAAAA) >> 1) | ((v & 0x55555555) << 1));
+	v = (((v & 0xCCCCCCCC) >> 2) | ((v & 0x33333333) << 2));
+	v = (((v & 0xF0F0F0F0) >> 4) | ((v & 0x0F0F0F0F) << 4));
+	v = (((v & 0xFF00FF00) >> 8) | ((v & 0x00FF00FF) << 8));
+	return (v >> 16) | (v << 16);
+}
+uint2 reverse(uint2 v)
+{
+	v = (((v & 0xAAAAAAAA) >> 1) | ((v & 0x55555555) << 1));
+	v = (((v & 0xCCCCCCCC) >> 2) | ((v & 0x33333333) << 2));
+	v = (((v & 0xF0F0F0F0) >> 4) | ((v & 0x0F0F0F0F) << 4));
+	v = (((v & 0xFF00FF00) >> 8) | ((v & 0x00FF00FF) << 8));
+	return (v >> 16) | (v << 16);
+}
+uint3 reverse(uint3 v)
+{
+	v = (((v & 0xAAAAAAAA) >> 1) | ((v & 0x55555555) << 1));
+	v = (((v & 0xCCCCCCCC) >> 2) | ((v & 0x33333333) << 2));
+	v = (((v & 0xF0F0F0F0) >> 4) | ((v & 0x0F0F0F0F) << 4));
+	v = (((v & 0xFF00FF00) >> 8) | ((v & 0x00FF00FF) << 8));
+	return (v >> 16) | (v << 16);
+}
+uint4 reverse(uint4 v)
+{
+	v = (((v & 0xAAAAAAAA) >> 1) | ((v & 0x55555555) << 1));
+	v = (((v & 0xCCCCCCCC) >> 2) | ((v & 0x33333333) << 2));
+	v = (((v & 0xF0F0F0F0) >> 4) | ((v & 0x0F0F0F0F) << 4));
+	v = (((v & 0xFF00FF00) >> 8) | ((v & 0x00FF00FF) << 8));
+	return (v >> 16) | (v << 16);
+}
+#endif
+#endif
+		]]>
+	</shader>
+</effect>

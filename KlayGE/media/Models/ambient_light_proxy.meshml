@@ -1,0 +1,122 @@
+<?xml version="1.0"?>
+
+<model version="6">
+	<materials_chunk>
+		<material ambient="0 0 0" diffuse="0 0 0" specular="0 0 0" emit="1 1 1" opacity="1" specular_level="0" shininess="10"/>
+	</materials_chunk>
+	<meshes_chunk>
+		<mesh name="Hedra01" mtl_id="0">
+			<vertices_chunk>
+				<pos_bb min="-0.707107 -1 -0.707107" max="0.707107 1 0.707107"/>
+				<tc_bb min="-0.5 0.5" max="0.5 1.5"/>
+
+				<vertex v="0 1 0">
+					<tangent_quat v="-0.673884 -0.214186 -0.673884 0.214186"/>
+					<tex_coord v="0 0.5"/>
+				</vertex>
+				<vertex v="0 1 0">
+					<tangent_quat v="0.214186 0.673884 0.214186 -0.673884"/>
+					<tex_coord v="0 0.5"/>
+				</vertex>
+				<vertex v="0 1 0">
+					<tangent_quat v="-0.214186 0.214186 0.673884 0.673884"/>
+					<tex_coord v="0.5 1"/>
+				</vertex>
+				<vertex v="0 1 0">
+					<tangent_quat v="0.673884 0.673884 0.214186 -0.214186"/>
+					<tex_coord v="0.5 1"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 0.707107">
+					<tangent_quat v="-0.673884 -0.214186 -0.673884 0.214186"/>
+					<tex_coord v="0.5 1"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 0.707107">
+					<tangent_quat v="0.214186 -0.214186 0.673884 0.673884"/>
+					<tex_coord v="5.1842e-011 0.5"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 0.707107">
+					<tangent_quat v="-0.214186 0.214186 0.673884 0.673884"/>
+					<tex_coord v="5.1842e-011 0.5"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 0.707107">
+					<tangent_quat v="0.673884 -0.214186 0.673884 0.214186"/>
+					<tex_coord v="0.5 1"/>
+				</vertex>
+				<vertex v="-0.707107 2.49949e-017 0.707107">
+					<tangent_quat v="0.214186 -0.214186 0.673884 0.673884"/>
+					<tex_coord v="1.24974e-017 1.5"/>
+				</vertex>
+				<vertex v="-0.707107 2.49949e-017 0.707107">
+					<tangent_quat v="0.214186 0.673884 0.214186 -0.673884"/>
+					<tex_coord v="0.5 1"/>
+				</vertex>
+				<vertex v="-0.707107 2.49949e-017 0.707107">
+					<tangent_quat v="-0.214186 0.214186 0.673884 0.673884"/>
+					<tex_coord v="1.24974e-017 1.5"/>
+				</vertex>
+				<vertex v="-0.707107 2.49949e-017 0.707107">
+					<tangent_quat v="-0.214186 0.673884 -0.214186 -0.673884"/>
+					<tex_coord v="0.5 1"/>
+				</vertex>
+				<vertex v="-0.707107 -2.22045e-016 -0.707107">
+					<tangent_quat v="0.214186 0.673884 0.214186 -0.673884"/>
+					<tex_coord v="-0.5 1"/>
+				</vertex>
+				<vertex v="-0.707107 -2.22045e-016 -0.707107">
+					<tangent_quat v="-0.673884 -0.673884 0.214186 -0.214186"/>
+					<tex_coord v="-1.11022e-016 1.5"/>
+				</vertex>
+				<vertex v="-0.707107 -2.22045e-016 -0.707107">
+					<tangent_quat v="0.673884 0.673884 0.214186 -0.214186"/>
+					<tex_coord v="-1.11022e-016 1.5"/>
+				</vertex>
+				<vertex v="-0.707107 -2.22045e-016 -0.707107">
+					<tangent_quat v="-0.214186 0.673884 -0.214186 -0.673884"/>
+					<tex_coord v="-0.5 1"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 -0.707107">
+					<tangent_quat v="-0.673884 -0.214186 -0.673884 0.214186"/>
+					<tex_coord v="-0.5 1"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 -0.707107">
+					<tangent_quat v="-0.673884 -0.673884 0.214186 -0.214186"/>
+					<tex_coord v="5.18419e-011 0.5"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 -0.707107">
+					<tangent_quat v="0.673884 0.673884 0.214186 -0.214186"/>
+					<tex_coord v="5.18419e-011 0.5"/>
+				</vertex>
+				<vertex v="0.707107 1.03684e-010 -0.707107">
+					<tangent_quat v="0.673884 -0.214186 0.673884 0.214186"/>
+					<tex_coord v="-0.5 1"/>
+				</vertex>
+				<vertex v="1.46631e-010 -1 2.55351e-015">
+					<tangent_quat v="0.214186 -0.214186 0.673884 0.673884"/>
+					<tex_coord v="-0.5 1"/>
+				</vertex>
+				<vertex v="1.46631e-010 -1 2.55351e-015">
+					<tangent_quat v="-0.673884 -0.673884 0.214186 -0.214186"/>
+					<tex_coord v="-0.5 1"/>
+				</vertex>
+				<vertex v="1.46631e-010 -1 2.55351e-015">
+					<tangent_quat v="0.673884 -0.214186 0.673884 0.214186"/>
+					<tex_coord v="1.80561e-015 1.5"/>
+				</vertex>
+				<vertex v="1.46631e-010 -1 2.55351e-015">
+					<tangent_quat v="-0.214186 0.673884 -0.214186 -0.673884"/>
+					<tex_coord v="1.80561e-015 1.5"/>
+				</vertex>
+			</vertices_chunk>
+			<triangles_chunk>
+				<triangle index="4 16 0"/>
+				<triangle index="8 20 5"/>
+				<triangle index="1 12 9"/>
+				<triangle index="17 21 13"/>
+				<triangle index="2 10 6"/>
+				<triangle index="3 18 14"/>
+				<triangle index="7 22 19"/>
+				<triangle index="23 11 15"/>
+			</triangles_chunk>
+		</mesh>
+	</meshes_chunk>
+</model>

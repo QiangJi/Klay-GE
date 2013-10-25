@@ -1,0 +1,30 @@
+<?xml version='1.0'?>
+
+<post_processors>
+	<post_processor name="in_block_scan_cs_x">
+		<params>
+			<param name="num_waves"/>
+		</params>
+		<input>
+			<pin name="in_tex"/>
+		</input>
+		<output>
+			<pin name="out_tex"/>
+			<pin name="out_sum_tex"/>
+		</output>
+		<shader effect="SAT.fxml" tech="SATScanXCS"/>
+	</post_processor>
+	<post_processor name="in_block_scan_cs_y">
+		<params>
+			<param name="num_waves"/>
+		</params>
+		<input>
+			<pin name="in_tex"/>
+		</input>
+		<output>
+			<pin name="out_tex"/>
+			<pin name="out_sum_tex"/>
+		</output>
+		<shader effect="SAT.fxml" tech="SATScanYCS"/>
+	</post_processor>
+</post_processors>

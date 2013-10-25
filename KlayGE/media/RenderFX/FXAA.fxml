@@ -1,0 +1,287 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="PostProcess.fxml"/>
+
+	<parameter type="float2" name="inv_width_height"/>
+	<parameter type="texture2D" name="color_tex"/>
+	<parameter type="sampler" name="linear_wrap_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="wrap"/>
+		<state name="address_v" value="wrap"/>
+	</parameter>
+
+	<shader>
+		<![CDATA[
+float3 DebugFxaaPixelShader(float2 pos)
+{
+	float lumaN = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+0, -1) * inv_width_height).w;
+	float lumaW = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(-1, +0) * inv_width_height).w;
+	float lumaM = color_tex.Sample(linear_wrap_sampler, pos.xy).w;
+	float lumaE = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+1, +0) * inv_width_height).w;
+	float lumaS = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+0, +1) * inv_width_height).w;
+	float rangeMin = min(lumaM, min(min(lumaN, lumaW), min(lumaS, lumaE)));
+	float rangeMax = max(lumaM, max(max(lumaN, lumaW), max(lumaS, lumaE)));
+	float range = rangeMax - rangeMin;
+	if (range < max(1 / 24.0f, rangeMax / 8))
+	{
+		return lumaM / (1 + (0.587f / 0.299f));
+	}
+
+	float lumaNW = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(-1, -1) * inv_width_height).w;
+	float lumaNE = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+1, -1) * inv_width_height).w;
+	float lumaSW = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(-1, +1) * inv_width_height).w;
+	float lumaSE = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+1, +1) * inv_width_height).w;
+
+	float lumaNS = lumaN + lumaS;
+	float lumaWE = lumaW + lumaE;
+	float subpixRcpRange = 1 / range;
+	float subpixNSWE = lumaNS + lumaWE;
+	float edgeHorz1 = -2 * lumaM + lumaNS;
+	float edgeVert1 = -2 * lumaM + lumaWE;
+	
+	float lumaNESE = lumaNE + lumaSE;
+	float lumaNWNE = lumaNW + lumaNE;
+	float edgeHorz2 = -2 * lumaE + lumaNESE;
+	float edgeVert2 = -2 * lumaN + lumaNWNE;
+
+	float lumaNWSW = lumaNW + lumaSW;
+	float lumaSWSE = lumaSW + lumaSE;
+	float edgeHorz4 = abs(edgeHorz1) * 2 + abs(edgeHorz2);
+	float edgeVert4 = abs(edgeVert1) * 2 + abs(edgeVert2);
+	float edgeHorz3 = -2 * lumaW + lumaNWSW;
+	float edgeVert3 = -2 * lumaS + lumaSWSE;
+	float edgeHorz = abs(edgeHorz3) + edgeHorz4;
+	float edgeVert = abs(edgeVert3) + edgeVert4;
+	
+	float subpixNWSWNESE = lumaNWSW + lumaNESE;
+	float lengthSign = inv_width_height.x;
+	bool horzSpan = edgeHorz >= edgeVert;
+	if (horzSpan)
+	{
+		return float3(1.0f, 0.75f, 0.0f);
+	}
+	else
+	{
+		return float3(0.0f, 0.50f, 1.0f);
+	}
+}
+
+float3 FxaaPixelShader(float2 pos)
+{
+#if KLAYGE_DERIVATIVES
+	float2 grad_x = ddx(pos);
+	float2 grad_y = ddy(pos);
+#else
+	float2 grad_x = 0;
+	float2 grad_y = 0;
+#endif
+	
+	float2 posM = pos;
+	
+	float4 rgbyM = color_tex.Sample(linear_wrap_sampler, pos.xy);
+	float lumaN = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+0, -1) * inv_width_height).w;
+	float lumaW = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(-1, +0) * inv_width_height).w;
+	float lumaM = rgbyM.w;
+	float lumaE = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+1, +0) * inv_width_height).w;
+	float lumaS = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+0, +1) * inv_width_height).w;
+	float rangeMin = min(lumaM, min(min(lumaN, lumaW), min(lumaS, lumaE)));
+	float rangeMax = max(lumaM, max(max(lumaN, lumaW), max(lumaS, lumaE)));
+	float range = rangeMax - rangeMin;
+	if (range < max(1 / 24.0f, rangeMax / 8))
+	{
+		return rgbyM.xyz;
+	}
+
+	float lumaNW = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(-1, -1) * inv_width_height).w;
+	float lumaNE = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+1, -1) * inv_width_height).w;
+	float lumaSW = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(-1, +1) * inv_width_height).w;
+	float lumaSE = color_tex.Sample(linear_wrap_sampler, pos.xy + float2(+1, +1) * inv_width_height).w;
+
+	float lumaNS = lumaN + lumaS;
+	float lumaWE = lumaW + lumaE;
+	float subpixRcpRange = 1 / range;
+	float subpixNSWE = lumaNS + lumaWE;
+	float edgeHorz1 = -2 * lumaM + lumaNS;
+	float edgeVert1 = -2 * lumaM + lumaWE;
+	
+	float lumaNESE = lumaNE + lumaSE;
+	float lumaNWNE = lumaNW + lumaNE;
+	float edgeHorz2 = -2 * lumaE + lumaNESE;
+	float edgeVert2 = -2 * lumaN + lumaNWNE;
+
+	float lumaNWSW = lumaNW + lumaSW;
+	float lumaSWSE = lumaSW + lumaSE;
+	float edgeHorz4 = abs(edgeHorz1) * 2 + abs(edgeHorz2);
+	float edgeVert4 = abs(edgeVert1) * 2 + abs(edgeVert2);
+	float edgeHorz3 = -2 * lumaW + lumaNWSW;
+	float edgeVert3 = -2 * lumaS + lumaSWSE;
+	float edgeHorz = abs(edgeHorz3) + edgeHorz4;
+	float edgeVert = abs(edgeVert3) + edgeVert4;
+	
+	float subpixNWSWNESE = lumaNWSW + lumaNESE;
+	float lengthSign = inv_width_height.x;
+	bool horzSpan = edgeHorz >= edgeVert;
+	float subpixA = subpixNSWE * 2 + subpixNWSWNESE;
+
+	if (!horzSpan)
+	{
+		lumaN = lumaW;
+		lumaS = lumaE;
+	}
+	else
+	{
+		lengthSign = inv_width_height.y;
+	}
+	float subpixB = subpixA / 12 - lumaM;
+	float gradientN = lumaN - lumaM;
+	float gradientS = lumaS - lumaM;
+	float lumaNN = lumaN + lumaM;
+	float lumaSS = lumaS + lumaM;
+	bool pairN = abs(gradientN) >= abs(gradientS);
+	float gradient = max(abs(gradientN), abs(gradientS));
+	if (pairN)
+	{
+		lengthSign = -lengthSign;
+	}
+	float subpixC = saturate(abs(subpixB) * subpixRcpRange);
+
+	float2 posB = posM;
+	float2 offNP;
+	if (!horzSpan)
+	{
+		offNP.x = 0;
+		offNP.y = inv_width_height.y;
+		posB.x += lengthSign * 0.5f;
+	}
+	else
+	{
+		offNP.x = inv_width_height.x;
+		offNP.y = 0;
+		posB.y += lengthSign * 0.5f;
+	}
+
+	float2 posN = posB - offNP;
+	float2 posP = posB + offNP;
+	float subpixD = -2 * subpixC + 3;
+	float lumaEndN = color_tex.Sample(linear_wrap_sampler, posN).w;
+	float subpixE = subpixC * subpixC;
+	float lumaEndP = color_tex.Sample(linear_wrap_sampler, posP).w;
+
+	if (!pairN)
+	{
+		lumaNN = lumaSS;
+	}
+	float gradientScaled = gradient / 4;
+	float lumaMM = lumaM - lumaNN * 0.5f;
+	float subpixF = subpixD * subpixE;
+	bool lumaMLTZero = lumaMM < 0;
+
+	lumaEndN -= lumaNN * 0.5f;
+	lumaEndP -= lumaNN * 0.5f;
+	bool doneN = abs(lumaEndN) >= gradientScaled;
+	bool doneP = abs(lumaEndP) >= gradientScaled;
+	if (!doneN)
+	{
+		posN -= offNP * 1.5f;
+	}
+	bool doneNP = (!doneN) || (!doneP);
+	if (!doneP)
+	{
+		posP += offNP * 1.5f;
+	}
+
+	float step = 2;
+	for (int i = 0; (i < 3) && doneNP; ++ i)
+	{
+		step *= i + 1;
+
+		if (!doneN)
+		{
+			lumaEndN = color_tex.SampleGrad(linear_wrap_sampler, posN.xy, grad_x, grad_y).w;
+			lumaEndN = lumaEndN - lumaNN * 0.5f;
+		}
+		if (!doneP)
+		{
+			lumaEndP = color_tex.SampleGrad(linear_wrap_sampler, posP.xy, grad_x, grad_y).w;
+			lumaEndP = lumaEndP - lumaNN * 0.5f;
+		}
+		doneN = abs(lumaEndN) >= gradientScaled;
+		doneP = abs(lumaEndP) >= gradientScaled;
+		if (!doneN)
+		{
+			posN -= offNP * step;
+		}
+		doneNP = (!doneN) || (!doneP);
+		if (!doneP)
+		{
+			posP += offNP * step;
+		}
+	}
+	
+	float dstN = posM.x - posN.x;
+	float dstP = posP.x - posM.x;
+	if (!horzSpan)
+	{
+		dstN = posM.y - posN.y;
+		dstP = posP.y - posM.y;
+	}
+
+	bool goodSpanN = (lumaEndN < 0) != lumaMLTZero;
+	float spanLength = (dstP + dstN);
+	bool goodSpanP = (lumaEndP < 0) != lumaMLTZero;
+	float spanLengthRcp = 1 / spanLength;
+
+	bool directionN = dstN < dstP;
+	float dst = min(dstN, dstP);
+	bool goodSpan = directionN ? goodSpanN : goodSpanP;
+	float subpixG = subpixF * subpixF;
+	float pixelOffset = dst * -spanLengthRcp + 0.5f;
+	float subpixH = subpixG * 0.75f;
+
+	float pixelOffsetGood = goodSpan ? pixelOffset : 0;
+	float pixelOffsetSubpix = max(pixelOffsetGood, subpixH);
+	if (!horzSpan)
+	{
+		posM.x += pixelOffsetSubpix * lengthSign;
+	}
+	else
+	{
+		posM.y += pixelOffsetSubpix * lengthSign;
+	}
+
+	return color_tex.Sample(linear_wrap_sampler, posM).xyz;
+}
+
+float4 FXAAPS(float2 tc0 : TEXCOORD0) : SV_Target
+{
+	return float4(FxaaPixelShader(tc0), 1.0f);
+}
+
+float4 DebugFXAAPS(float2 tc0 : TEXCOORD0) : SV_Target
+{
+	return float4(DebugFxaaPixelShader(tc0), 1.0f);
+}
+		]]>
+	</shader>
+
+	<technique name="FXAA">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="FXAAPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="FXAAShowEdge">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="DebugFXAAPS()"/>
+		</pass>
+	</technique>
+</effect>

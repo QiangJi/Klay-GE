@@ -1,0 +1,208 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="PostProcess.fxml"/>
+
+	<parameter type="float" name="separation"/>
+	<parameter type="float" name="zpd"/>
+	<parameter type="int" name="eye"/>
+	
+	<parameter type="sampler" name="point_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="float4" name="width_height"/>
+	<parameter type="texture2D" name="color_tex"/>
+	<parameter type="texture2D" name="depth_tex"/>
+	<parameter type="texture2D" name="overlay_tex"/>
+	
+	<shader>
+		<![CDATA[
+float4 CalcStereoCoord(float2 tc : TEXCOORD0)
+{
+	// From "Secrets of CryENGINE 3 Graphics Technology"
+	
+	const float samples[3] = { 0.5f, 0.66f, 1.0f };
+	float min_depth_l = 1, min_depth_r = 1;
+	float2 uv = 0;
+	for (int i = 0; i < 3; ++ i)
+	{
+	    uv.x = samples[i] * separation;
+	    min_depth_l = min(min_depth_l, depth_tex.Sample(point_sampler, tc + uv).x);
+	    min_depth_r = min(min_depth_r, depth_tex.Sample(point_sampler, tc - uv).x);
+	}
+	
+	float parallax_l = (min_depth_l > 0 ? separation * (1 - zpd / min_depth_l) : 0);
+    float parallax_r = (min_depth_r > 0 ? separation * (1 - zpd / min_depth_r) : 0);
+	
+	return float4(tc + float2(parallax_l, 0), tc - float2(parallax_r, 0));
+}
+
+
+float4 RedCyanPS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float4 lr_coord = CalcStereoCoord(tex);
+	float4 left = color_tex.Sample(point_sampler, lr_coord.xy);
+	float4 right = color_tex.Sample(point_sampler, lr_coord.zw);
+	float4 overlay = overlay_tex.Sample(point_sampler, tex);
+	left = lerp(left, overlay, overlay.a);
+	right = lerp(right, overlay, overlay.a);
+	return float4(dot(left.gb, float2(0.7f, 0.3f)), right.gb, 1);
+}
+
+float4 YellowBluePS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float4 lr_coord = CalcStereoCoord(tex);
+	float4 left = color_tex.Sample(point_sampler, lr_coord.xy);
+	float4 right = color_tex.Sample(point_sampler, lr_coord.zw);
+	float4 overlay = overlay_tex.Sample(point_sampler, tex);
+	left = lerp(left, overlay, overlay.a);
+	right = lerp(right, overlay, overlay.a);
+	return float4(left.rg, right.b, 1);
+}
+
+float4 GreenRedPS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float4 lr_coord = CalcStereoCoord(tex);
+	float4 left = color_tex.Sample(point_sampler, lr_coord.xy);
+	float4 right = color_tex.Sample(point_sampler, lr_coord.zw);
+	float4 overlay = overlay_tex.Sample(point_sampler, tex);
+	left = lerp(left, overlay, overlay.a);
+	right = lerp(right, overlay, overlay.a);
+	return float4(right.r, left.gb, 1);
+}
+
+
+float4 HorInterlacingPS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float4 lr_coord = CalcStereoCoord(tex);	
+	uint u = tex.x * width_height.x;
+	float2 coord = (u % 2) ? lr_coord.xy : lr_coord.zw;
+	float4 scene = color_tex.Sample(point_sampler, coord);
+	float4 overlay = overlay_tex.Sample(point_sampler, tex);
+	return lerp(scene, overlay, overlay.a);
+}
+
+float4 VerInterlacingPS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float4 lr_coord = CalcStereoCoord(tex);	
+	uint v = tex.y * width_height.y;
+	float2 coord = (v % 2) ? lr_coord.xy : lr_coord.zw;
+	float4 scene = color_tex.Sample(point_sampler, coord);
+	float4 overlay = overlay_tex.Sample(point_sampler, tex);
+	return lerp(scene, overlay, overlay.a);
+}
+
+float4 HorizontalPS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float2 overlay_coord = (tex.x < 0.5f) ? float2(tex.x * 2, tex.y) : float2((tex.x - 0.5f) * 2, tex.y);
+	float4 lr_coord = CalcStereoCoord(overlay_coord);
+	float2 coord = (tex.x < 0.5f) ? lr_coord.xy : lr_coord.zw;
+	float4 scene = color_tex.Sample(point_sampler, coord);
+	float4 overlay = overlay_tex.Sample(point_sampler, overlay_coord);
+	return lerp(scene, overlay, overlay.a);
+}
+
+float4 VerticalPS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float2 overlay_coord = (tex.y < 0.5f) ? float2(tex.x, tex.y * 2) : float2(tex.x, (tex.y - 0.5f) * 2);
+	float4 lr_coord = CalcStereoCoord(overlay_coord);
+	float2 coord = (tex.y < 0.5f) ? lr_coord.xy : lr_coord.zw;
+	float4 scene = color_tex.Sample(point_sampler, coord);
+	float4 overlay = overlay_tex.Sample(point_sampler, overlay_coord);
+	return lerp(scene, overlay, overlay.a);
+}
+
+float4 LCDShutterOneEyePS(float2 tex : TEXCOORD0) : SV_Target
+{
+	float4 lr_coord = CalcStereoCoord(tex);
+	float2 coord = (0 == eye) ? lr_coord.xy : lr_coord.zw;
+	float4 scene = color_tex.Sample(point_sampler, coord);
+	float4 overlay = overlay_tex.Sample(point_sampler, tex);
+	return lerp(scene, overlay, overlay.a);
+}
+		]]>
+	</shader>
+	
+	<technique name="RedCyan">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="RedCyanPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="YellowBlue">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="YellowBluePS()"/>
+		</pass>
+	</technique>
+
+	<technique name="GreenRed">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="GreenRedPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="HorInterlacing">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="HorInterlacingPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="VerInterlacing">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="VerInterlacingPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="Horizontal">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="HorizontalPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="Vertical">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="VerticalPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="LCDShutterOneEye">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="LCDShutterOneEyePS()"/>
+		</pass>
+	</technique>
+</effect>

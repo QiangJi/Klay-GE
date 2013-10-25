@@ -1,0 +1,15 @@
+<?xml version='1.0'?>
+
+<effect>
+	<shader>
+		<![CDATA[
+float4 Transform2D(float4 position, float2 half_width_height)
+{
+	float4 ret;
+	ret.xy = float2(position.x - half_width_height.x, half_width_height.y - position.y) / half_width_height;
+	ret.zw = position.zw;
+	return ret;
+}
+		]]>
+	</shader>
+</effect>

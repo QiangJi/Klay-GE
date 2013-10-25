@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+	<include name="PostProcess.fxml"/>
+	<include name="Lighting.fxml"/>
+	<include name="Quaternion.fxml"/>
+
+	<parameter type="sampler" name="point_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="sampler" name="trilinear_sampler">
+		<state name="filtering" value="min_mag_mip_linear"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="float4x4" name="ls_to_es"/>
+	<parameter type="float4" name="vpl_params"/>
+	<parameter type="float4" name="light_color"/>
+	<parameter type="float4" name="light_cos_out_inner"/>
+	<parameter type="float3" name="light_falloff"/>
+	<parameter type="float4x4" name="inv_view"/>
+
+	<parameter type="float3" name="upper_left"/>
+	<parameter type="float3" name="x_dir"/>
+	<parameter type="float3" name="y_dir"/>
+	<parameter type="int2" name="is_not_bottom_top_level"/>
+	<parameter type="float" name="depth_threshold"/>
+	<parameter type="float" name="smaller_level"/>
+
+	<parameter type="texture2D" name="albedo_tex"/>
+	<parameter type="texture2D" name="normal_es_tex"/>
+	<parameter type="texture2D" name="depth_tex" />
+	<parameter type="texture2D" name="depth_derivate_tex" />
+
+	<shader>
+		<![CDATA[
+float3 texcoord_to_view(float2 tex)
+{
+	return upper_left + x_dir * tex.x + y_dir * tex.y;
+}
+
+float4 RSM2VPLsSpot(float2 tc, float2 rsm_tc, float level, float factor)
+{
+	float4 albedo_spec = albedo_tex.SampleLevel(point_sampler, rsm_tc, level);
+	float3 albedo = albedo_spec.xyz;
+	float specular_level = albedo_spec.w;
+	float4 normal_shininess = normal_es_tex.SampleLevel(point_sampler, rsm_tc, level);
+	float3 normal_ls = normal_shininess.xyz * 2 - 1;
+	float shininess = normal_shininess.w * 256.0f;
+	float3 normal_es = mul(float4(normal_ls, 0), ls_to_es).xyz;
+	float depth_ls = depth_tex.Sample(point_sampler, rsm_tc).x;
+
+	float3 view_dir = texcoord_to_view(float2(rsm_tc.x, KLAYGE_FLIPPING < 0 ? rsm_tc.y : 1 - rsm_tc.y));
+	float3 pos_ls = view_dir * (depth_ls / view_dir.z);
+
+	if (tc.y < 1 / 4.0f)
+	{
+		float4 light = 0;
+		float spot = spot_lighting(float3(0, 0, 0), float3(0, 0, 1), light_cos_out_inner.xy, pos_ls);
+		if (spot > 0)
+		{
+			float n_dot_l = -normal_ls.z;
+			if (n_dot_l > 0)
+			{
+				float atten = n_dot_l * spot * attenuation_term(float3(0, 0, 0), pos_ls, light_falloff);
+				light = float4(albedo * factor, atten);
+			}
+		}
+
+		return light;
+	}
+	else if (tc.y < 2 / 4.0f)
+	{
+		return float4(normal_es, specular_level);
+	}
+	else if (tc.y < 3 / 4.0f)
+	{
+		float4 pos_es = mul(float4(pos_ls, 1), ls_to_es);
+		pos_es /= pos_es.w;
+		return float4(pos_es.xyz, shininess);
+	}
+	else
+	{
+		return normalize(unit_axis_to_unit_axis(float3(0, 1, 0), mul(normal_es, (float3x3)inv_view)));
+	}
+}
+
+float4 RSM2VPLsSpotPS(float2 tc : TEXCOORD0) : SV_Target
+{
+	float vpl_id = floor((1.0 - tc.x) * vpl_params.x);
+	float accum = 1;
+	float accum_sqrt = 1;
+	float factor = 4;
+	int k = 0;
+	if (vpl_id - vpl_params.w * (accum * 4 - 1) / 3 > 0)
+	{
+		accum *= 4;
+		accum_sqrt *= 2;
+		factor = 1;
+		k = 1;
+	}
+
+	vpl_id -= vpl_params.w * (accum - 1) / 3;
+	float n = accum_sqrt * vpl_params.z;
+	float j = floor(vpl_id / n);
+	float i = vpl_id - j * n;
+	float2 rsm_tc = (float2(i, j) + 0.5f) / n;
+
+	float depth_deriv = depth_derivate_tex.SampleLevel(point_sampler, rsm_tc, 0).r;  
+	if (k != is_not_bottom_top_level.x)
+	{
+		if (depth_deriv > depth_threshold)
+		{
+			return -1;
+		}
+	}
+	if (k != is_not_bottom_top_level.y)
+	{
+		if (depth_deriv <= depth_threshold)
+		{
+			return -1;
+		}
+	}
+
+	return RSM2VPLsSpot(tc, rsm_tc, smaller_level - k, factor);
+}
+		]]>
+	</shader>
+
+	<technique name="RSM2VPLsSpot">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="RSM2VPLsSpotPS()"/>
+		</pass>
+	</technique>
+</effect>

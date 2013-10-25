@@ -1,0 +1,474 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="util.fxml"/>
+	<include name="Quaternion.fxml"/>
+	<include name="Lighting.fxml"/>
+	<include name="JudaTexture.fxml"/>
+
+	<cbuffer name="per_frame">
+		<parameter type="float4x4" name="mvp" semantic="WORLDVIEWPROJECTION"/>
+		<parameter type="float4x4" name="world"/>
+		<parameter type="float3" name="pos_center"/>
+		<parameter type="float3" name="pos_extent"/>
+		<parameter type="float2" name="tc_center"/>
+		<parameter type="float2" name="tc_extent"/>
+		<parameter type="float3" name="eye_pos"/>
+		<parameter type="float3" name="light_pos"/>
+		<parameter type="float3" name="light_color"/>
+		<parameter type="float3" name="light_falloff"/>
+	</cbuffer>
+
+	<parameter type="float" name="height_scale"/>
+
+	<parameter type="int4" name="diffuse_tex_bb"/>
+	<parameter type="int4" name="normal_tex_bb"/>
+	<parameter type="int4" name="height_tex_bb"/>
+	<parameter type="int2" name="tex_size"/>
+
+	<parameter type="bool" name="use_na_length"/>
+	<parameter type="texture2D" name="na_length_tex"/>
+	<parameter type="sampler" name="linear_sampler">
+		<state name="filtering" value="min_mag_mip_linear"/>
+		<state name="address_u" value="wrap"/>
+		<state name="address_v" value="wrap"/>
+	</parameter>
+
+	<parameter type="int" name="lod_threshold" value="3"/>
+	<parameter type="int" name="min_samples" value="8"/>
+	<parameter type="int" name="max_samples" value="50"/>
+	<parameter type="float" name="shadow_softening" value="0.58"/>
+
+	<shader>
+		<![CDATA[
+void CalcTBN(float4 pos,
+					float2 texcoord0,
+					float4 T,
+					out float4 oL,
+					out float4 oH,
+					out float3 oV,
+					out float4 oPos)
+{
+	oPos = mul(pos, mvp);
+	
+	float3x3 obj_to_tangent;
+	obj_to_tangent[0] = transform_quat(float3(1, 0, 0), T);
+	obj_to_tangent[1] = transform_quat(float3(0, 1, 0), T) * sign(T.w);
+	obj_to_tangent[2] = transform_quat(float3(0, 0, 1), T);
+
+	float3 light_vec = light_pos - pos.xyz;
+	float3 view_vec = eye_pos - pos.xyz;
+	float3 half_vec = normalize(light_vec) + normalize(view_vec);
+
+	oL.xyz = mul(obj_to_tangent, light_vec);
+	oH.xyz = mul(obj_to_tangent, half_vec);
+	oV = mul(obj_to_tangent, view_vec);
+	
+	oL.w = texcoord0.x;
+	oH.w = texcoord0.y;
+}
+
+void CalcTBNVS(float4 pos				: POSITION,
+					float2 texcoord0	: TEXCOORD0,
+					float4 tangent_quat : TANGENT,
+					float distortion	: TEXCOORD1,
+					out float4 oL			: TEXCOORD0,	// in tangent space
+					out float4 oH			: TEXCOORD1,	// in tangent space
+					out float3 oV			: TEXCOORD2,
+					out float oDistortion	: TEXCOORD3,
+					out float4 oPos			: SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	texcoord0 = texcoord0 * tc_extent + tc_center;
+	tangent_quat = tangent_quat * 2 - 1;
+
+	CalcTBN(pos, texcoord0, tangent_quat,
+		oL, oH, oV, oPos);
+
+	oDistortion = distortion;
+}
+
+float4 Shading(float3 L, float3 H, float2 uv, float3 normal, float shadow, bool nl)
+{
+	float atten = attenuation_term(0, -L.xyz, light_falloff);
+
+	float3 diffuse = judatex2d_wrap(diffuse_tex_bb, uv).rgb;
+
+	float3 light_vec = normalize(L);
+	float3 halfway = normalize(H);
+
+	float roughness = 128;
+	if (nl)
+	{
+		float len = get_x_channel(na_length_tex.Sample(linear_sampler, uv));
+		float ft = len / lerp(roughness, 1, len);
+		roughness *= ft;
+	}
+
+	return float4(0.1f * diffuse + shadow * atten * light_color * calc_brdf(diffuse, 0.2f, roughness, light_vec, halfway, normal), 1);
+}
+
+float4 NonePS(float4 L		: TEXCOORD0,
+					float4 H		: TEXCOORD1) : SV_Target
+{
+	float2 uv = float2(L.w, H.w);
+	return Shading(L.xyz, H.xyz, uv, float3(0, 0, 1), 1, 0);
+}
+
+float4 BumpMappingPS(float4 L		: TEXCOORD0,
+					float4 H		: TEXCOORD1) : SV_Target
+{
+	float2 uv = float2(L.w, H.w);
+	return Shading(L.xyz, H.xyz, uv, restore_normal(judatex2d_wrap(normal_tex_bb, uv).rg * 2 - 1), 1, use_na_length);
+}
+
+float4 ParallaxMappingPS(float4 L		: TEXCOORD0,
+					float4 H			: TEXCOORD1,
+					float3 V			: TEXCOORD2,
+					float distortion	: TEXCOORD3) : SV_Target
+{
+	float2 texCoord0 = float2(L.w, H.w);
+	
+	float3 view = normalize(V);
+	
+	float height = (judatex2d_wrap(height_tex_bb, texCoord0).r - 1) * height_scale;
+	float2 texUV = texCoord0 + (view.xy * height);
+
+	return Shading(L.xyz, H.xyz, texUV, restore_normal(judatex2d_wrap(normal_tex_bb, texUV).rg * 2 - 1), 1, use_na_length);
+}
+
+void ParallaxOcclusionMappingVS(float4 pos				: POSITION,
+					float2 texcoord0	: TEXCOORD0,
+					float4 tangent_quat			: TANGENT,
+					float distortion	: TEXCOORD1,
+					out float4 oL			: TEXCOORD0,	// in tangent space
+					out float4 oH			: TEXCOORD1,	// in tangent space
+					out float3 oV			: TEXCOORD2,	// in tangent space
+					out float4 oParallaxOffsetTS : TEXCOORD3,   // Parallax offset vector in tangent space
+					out float4 oPos			: SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	texcoord0 = texcoord0 * tc_extent + tc_center;
+	tangent_quat = tangent_quat * 2 - 1;
+
+	CalcTBN(pos, texcoord0, tangent_quat,
+		oL, oH, oV, oPos);
+
+	oParallaxOffsetTS = float4(normalize(oV).xy, normalize(oL.xyz).xy) * height_scale;
+}
+
+float4 ParallaxOcclusionMappingPS(float4 L		: TEXCOORD0,
+					float4 H					: TEXCOORD1,
+					float3 V					: TEXCOORD2,
+					float4 vParallaxOffsetTS	: TEXCOORD3,
+					float distortion			: TEXCOORD4) : SV_Target
+{
+	float3 view = normalize(V);
+	float2 texCoord = float2(L.w, H.w);
+
+	float level = mipmap_level(texCoord, tex_size);
+
+	float2 texUV = texCoord;
+	float fOcclusionShadow = 1;
+	if (level <= lod_threshold)
+	{
+		int nNumSteps = (int)lerp(max_samples, min_samples, dot(view, float3(0, 0, 1)));
+
+		float fStepSize = 1.0f / nNumSteps;
+		float fPrevHeight = 1;
+		float fNextHeight = 0;
+
+		int nStepIndex = 0;
+
+		float2 vTexOffsetPerStep = fStepSize * vParallaxOffsetTS.xy;
+		float2 vTexCurrentOffset = texCoord;
+		float fCurrentBound = 1;
+
+		float2 pt1 = 0;
+		float2 pt2 = 0;
+
+		while (nStepIndex < nNumSteps)
+		{
+			vTexCurrentOffset -= vTexOffsetPerStep;
+			float fCurrHeight = judatex2d_level_wrap(height_tex_bb, vTexCurrentOffset, level).r;
+			fCurrentBound -= fStepSize;
+
+			if (fCurrHeight > fCurrentBound)
+			{
+				pt1 = float2(fCurrentBound, fCurrHeight);
+				pt2 = float2(fCurrentBound + fStepSize, fPrevHeight);
+
+				nStepIndex = nNumSteps;
+			}
+			else
+			{
+				++ nStepIndex;
+			}
+			fPrevHeight = fCurrHeight;
+		}
+
+		float fDelta2 = pt2.x - pt2.y;
+		float fDelta1 = pt1.x - pt1.y;
+
+		float fDenominator = fDelta2 - fDelta1;
+		float fParallaxAmount;
+		if (0 == fDenominator)
+		{
+			fParallaxAmount = 0;
+		}
+		else
+		{
+			fParallaxAmount = (pt1.x * fDelta2 - pt2.x * fDelta1) / fDenominator;
+		}
+
+		float2 texSampleBase = texCoord - vParallaxOffsetTS.xy * (1 - fParallaxAmount);
+		if (level > lod_threshold - 1)
+		{
+			// Lerp the texture coordinate from parallax occlusion mapped coordinate to bump mapping
+			// smoothly based on the current mip level
+			texUV = lerp(texSampleBase, texCoord, frac(level));
+		}
+		else
+		{
+			texUV = texSampleBase;
+		}
+
+		// shadow
+		{
+			float2 vLightRayTS = vParallaxOffsetTS.zw;
+
+			// Compute the soft blurry shadows taking into account self-occlusion for 
+			// features of the height field
+
+			float sh0 = judatex2d_level_wrap(height_tex_bb, texSampleBase, level).r;
+			float4 shA987 = float4(judatex2d_level_wrap(height_tex_bb, texSampleBase + vLightRayTS * 0.88f, level).r - 0.88f,
+				judatex2d_level_wrap(height_tex_bb, texSampleBase + vLightRayTS * 0.77f, level).r - 0.77f,
+				judatex2d_level_wrap(height_tex_bb, texSampleBase + vLightRayTS * 0.66f, level).r - 0.66f,
+				judatex2d_level_wrap(height_tex_bb, texSampleBase + vLightRayTS * 0.55f, level).r - 0.55f);
+			float3 sh654 = float3(judatex2d_level_wrap(height_tex_bb, texSampleBase + vLightRayTS * 0.44f, level).r - 0.44f,
+				judatex2d_level_wrap(height_tex_bb, texSampleBase + vLightRayTS * 0.33f, level).r - 0.33f,
+				judatex2d_level_wrap(height_tex_bb, texSampleBase + vLightRayTS * 0.22f, level).r - 0.22f);
+			shA987 = (shA987 - sh0) * shadow_softening * float4(1, 2, 4, 6);
+			sh654 = (sh654 - sh0) * shadow_softening * float3(8, 10, 12);
+
+			// Compute the actual shadow strength
+			fOcclusionShadow = 1 - max(max(max(max(max(max(shA987.x, shA987.y), shA987.z), shA987.w), sh654.x), sh654.y), sh654.z);
+
+			// The previous computation overbrightens the image, let's adjust for that
+			fOcclusionShadow = saturate(fOcclusionShadow * 0.6f + 0.4f);
+		}
+	}
+
+	return Shading(L.xyz, H.xyz, texUV, restore_normal(judatex2d_level_wrap(normal_tex_bb, texUV, level).rg * 2 - 1), fOcclusionShadow, use_na_length);
+}
+		]]>
+	</shader>
+
+	<technique name="None">
+		<pass name="p0">
+			<state name="vertex_shader" value="CalcTBNVS()"/>
+			<state name="pixel_shader" value="NonePS()"/>
+		</pass>
+	</technique>
+
+	<technique name="Bump">
+		<pass name="p0">
+			<state name="vertex_shader" value="CalcTBNVS()"/>
+			<state name="pixel_shader" value="BumpMappingPS()"/>
+		</pass>
+	</technique>
+	
+	<technique name="Parallax">
+		<pass name="p0">
+			<state name="vertex_shader" value="CalcTBNVS()"/>
+			<state name="pixel_shader" value="ParallaxMappingPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="ParallaxOcclusion">
+		<pass name="p0">
+			<state name="vertex_shader" value="ParallaxOcclusionMappingVS()"/>
+			<state name="pixel_shader" value="ParallaxOcclusionMappingPS()"/>
+		</pass>
+	</technique>
+
+
+	<technique name="NoneWireframe" inherit="None">
+		<pass name="p0">
+			<state name="polygon_mode" value="line"/>
+		</pass>
+	</technique>
+
+	<technique name="BumpWireframe" inherit="Bump">
+		<pass name="p0">
+			<state name="polygon_mode" value="line"/>
+		</pass>
+	</technique>
+
+	<technique name="ParallaxWireframe" inherit="Parallax">
+		<pass name="p0">
+			<state name="polygon_mode" value="line"/>
+		</pass>
+	</technique>
+
+	<technique name="ParallaxOcclusionWireframe" inherit="ParallaxOcclusion">
+		<pass name="p0">
+			<state name="polygon_mode" value="line"/>
+		</pass>
+	</technique>
+
+	<shader version="5">
+		<![CDATA[
+struct VS_CONTROL_POINT_OUTPUT
+{
+	float3 Pos : POSITION;
+	float2 Texcoord0 : TEXCOORD0;
+	float3 Normal : TEXCOORD1;
+	float3 Tangent : TEXCOORD2;
+	float3 Binormal : TEXCOORD3;
+	float Distortion : TEXCOORD4;
+};
+
+VS_CONTROL_POINT_OUTPUT TessellationVS(float4 pos	: POSITION,
+					float2 texcoord0	: TEXCOORD0,
+					float4 tangent_quat			: TANGENT,
+					float distortion	: TEXCOORD1)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	texcoord0 = texcoord0 * tc_extent + tc_center;
+	tangent_quat = tangent_quat * 2 - 1;
+
+	VS_CONTROL_POINT_OUTPUT output;
+	
+	output.Pos = pos.xyz;
+	output.Texcoord0 = texcoord0;
+	output.Normal = transform_quat(float3(0, 0, 1), tangent_quat);
+	output.Tangent = transform_quat(float3(1, 0, 0), tangent_quat);
+	output.Binormal = transform_quat(float3(0, 1, 0), tangent_quat) * sign(tangent_quat.w);
+	output.Distortion = distortion * height_scale;
+
+	return output;
+}
+		
+struct HS_CONSTANT_DATA_OUTPUT
+{
+	// Tess factor for the FF HW block
+	float edges[3]	: SV_TessFactor;
+	float inside	: SV_InsideTessFactor;
+};
+
+HS_CONSTANT_DATA_OUTPUT TessellationConstantsHS(InputPatch<VS_CONTROL_POINT_OUTPUT, 3> ip)
+{
+	float4 tess_factors = float4(5, 5, 1, 9);
+	
+	HS_CONSTANT_DATA_OUTPUT output;
+    
+	// Calculate the tessellation factor per edge, based on distance from camera
+	float dist;
+	float3 mid_point;
+	// Edge 0
+	mid_point = (ip[2].Pos + ip[0].Pos) / 2;
+	dist = distance(mid_point, eye_pos) - tess_factors.z;
+	output.edges[0] = tess_factors.x * (1 - clamp(dist / tess_factors.w, 0, 1 - (1 / tess_factors.x)));
+	// Edge 1
+	mid_point = (ip[0].Pos + ip[1].Pos) / 2;
+	dist = distance(mid_point, eye_pos) - tess_factors.z;
+	output.edges[1] = tess_factors.x * (1 - clamp(dist / tess_factors.w, 0, 1 - (1 / tess_factors.x)));
+	// Edge 2
+	mid_point = (ip[1].Pos + ip[2].Pos) / 2;
+	dist = distance(mid_point, eye_pos) - tess_factors.z;
+	output.edges[2] = tess_factors.x * (1 - clamp(dist / tess_factors.w, 0, 1 - (1 / tess_factors.x)));
+	// Inside
+	output.inside = (output.edges[0] + output.edges[1] + output.edges[2]) / 3;
+
+	return output;
+}
+
+[domain("tri")]
+[partitioning("fractional_odd")]
+[outputtopology("triangle_cw")]
+[outputcontrolpoints(3)]
+[patchconstantfunc("TessellationConstantsHS")]
+VS_CONTROL_POINT_OUTPUT TessellationHS(InputPatch<VS_CONTROL_POINT_OUTPUT, 3> p, 
+										uint i : SV_OutputControlPointID)
+{
+	return p[i];
+}
+
+[domain("tri")]
+void TessellationDS(HS_CONSTANT_DATA_OUTPUT HSConstantData, 
+							float3 bc_coords : SV_DomainLocation,
+							const OutputPatch<VS_CONTROL_POINT_OUTPUT, 3> patch,
+
+							out float4 oL : TEXCOORD0,
+							out float4 oH : TEXCOORD1,
+							out float3 oV : TEXCOORD2,
+							out float4 oPos : SV_Position)
+{
+	// The barycentric coordinates
+	float u = bc_coords.x;
+	float v = bc_coords.y;
+	float w = bc_coords.z;
+	
+	float2 texcoord0 = patch[0].Texcoord0 * w
+			+ patch[1].Texcoord0 * u
+			+ patch[2].Texcoord0 * v;
+	float3 normal = patch[0].Normal * w
+			+ patch[1].Normal * u
+			+ patch[2].Normal * v;
+	normal = normalize(normal);
+	float3 tangent = patch[0].Tangent * w
+			+ patch[1].Tangent * u
+			+ patch[2].Tangent * v;
+	tangent = normalize(tangent);
+	float3 binormal = patch[0].Binormal * w
+			+ patch[1].Binormal * u
+			+ patch[2].Binormal * v;
+	binormal = normalize(binormal);
+
+	float distortion = patch[0].Distortion * w
+			+ patch[1].Distortion * u
+			+ patch[2].Distortion * v;
+
+	float3 pos = patch[0].Pos * w
+			+ patch[1].Pos * u
+			+ patch[2].Pos * v;
+	float height = (judatex2d_level_wrap(height_tex_bb, texcoord0, 0).r - 1) * distortion;
+	pos += height * normal;
+	
+	oPos = mul(float4(pos, 1), mvp);
+	
+	float3x3 obj_to_tangent;
+	obj_to_tangent[0] = tangent;
+	obj_to_tangent[1] = binormal;
+	obj_to_tangent[2] = normal;
+
+	float3 light_vec = light_pos - pos.xyz;
+	float3 view_vec = eye_pos - pos.xyz;
+	float3 half_vec = normalize(light_vec) + normalize(view_vec);
+
+	oL.xyz = mul(obj_to_tangent, light_vec);
+	oH.xyz = mul(obj_to_tangent, half_vec);
+	oV = mul(obj_to_tangent, view_vec);
+	
+	oL.w = texcoord0.x;
+	oH.w = texcoord0.y;
+}
+		]]>
+	</shader>
+
+	<technique name="Tessellation">
+		<pass name="p0">
+			<state name="vertex_shader" value="TessellationVS()"/>
+			<state name="hull_shader" value="TessellationHS()"/>
+			<state name="domain_shader" value="TessellationDS()"/>
+			<state name="pixel_shader" value="BumpMappingPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="TessellationWireframe" inherit="Tessellation">
+		<pass name="p0">
+			<state name="polygon_mode" value="line"/>
+		</pass>
+	</technique>
+</effect>

@@ -1,0 +1,620 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="Lighting.fxml"/>
+	<include name="Quaternion.fxml"/>
+
+	<parameter type="float4x4" name="mvp"/>
+	<parameter type="float4x4" name="model"/>
+	<parameter type="float4x4" name="obj_model_to_light_model"/>
+
+	<parameter type="float3" name="pos_center"/>
+	<parameter type="float3" name="pos_extent"/>
+	<parameter type="float2" name="tc_center"/>
+	<parameter type="float2" name="tc_extent"/>
+
+	<parameter type="float3" name="light_falloff"/>
+
+	<parameter type="float" name="esm_scale_factor"/>
+
+	<shader>
+		<![CDATA[
+float calc_dist(float4 position)
+{
+    float4 LightWorldPos = mul(position, obj_model_to_light_model);
+    LightWorldPos /= LightWorldPos.w;
+	return length(LightWorldPos.xyz);
+}
+
+void GenCubeShadowMapVS(float4 Position : POSITION,
+						float4 tangent_quat   : TANGENT,
+						out float oDist : TEXCOORD0,
+						out float4 oPos : SV_Position)
+{
+	Position = float4(Position.xyz * pos_extent + pos_center, 1);
+	
+    oPos = mul(Position, mvp);
+    oDist = calc_dist(Position);
+}
+
+float4 GenCubeShadowMapPS(float dist : TEXCOORD0) : SV_Target
+{
+	return dist;
+}
+		]]>
+	</shader>
+
+	<technique name="GenCubeShadowMap">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="GenCubeShadowMapVS()"/>
+			<state name="pixel_shader" value="GenCubeShadowMapPS()"/>
+		</pass>
+	</technique>
+
+	<parameter type="float4x4" name="mv" />
+	<parameter type="float" name="far" />
+
+	<shader>
+		<![CDATA[
+void CalcDPSM(float4 Position,
+			out float2 oDist,
+			out float4 oPos)
+{
+	// transform vertex to DP-space
+	oPos = mul(Position, mv);
+	oPos /= oPos.w;
+
+	// because the origin is at 0 the proj-vector
+	// matches the vertex-position
+	float fLength = length(oPos.xyz);
+	// normalize
+	oPos /= fLength;
+	// save for clipping
+	oDist.y = oPos.z;
+	// calc "normal" on intersection, by adding the 
+	// reflection-vector(0,0,1) and divide through 
+	// his z to get the texture coords
+	oPos.xy /= oPos.z + 1;
+	
+	// set z for z-buffering and neutralize w
+	oPos.z = fLength / far;
+	oPos.w = 1.0f;
+
+	// DP-depth
+	oDist.x = fLength;
+}
+
+void GenDPShadowMapVS(float4 Position : POSITION,
+						float4 tangent_quat : TANGENT,
+					out float2 oDist  : TEXCOORD0,
+					out float4 oPos   : SV_Position)
+{
+	Position = float4(Position.xyz * pos_extent + pos_center, 1);
+	
+	CalcDPSM(Position, oDist, oPos);
+}
+
+float4 GenDPShadowMapPS(float2 dist : TEXCOORD0) : SV_Target
+{
+	clip(dist.y);
+
+	return esm_scale_factor * dist.x;
+}
+		]]>
+	</shader>
+
+	<technique name="GenDPShadowMap">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="GenDPShadowMapVS()"/>
+			<state name="pixel_shader" value="GenDPShadowMapPS()"/>
+		</pass>
+	</technique>
+
+
+	<parameter type="bool" name="adaptive_tess"/>
+	<parameter type="float4" name="tess_factors"/>
+	<parameter type="float2" name="tess_edge_length_scale"/>
+
+	<shader>
+		<![CDATA[
+void InterpolateFlatAttrs(float3 bc_coords,
+				float3 pos0, float3 pos1, float3 pos2,
+				out float3 oPos)
+{
+	float u = bc_coords.x;
+	float v = bc_coords.y;
+	float w = bc_coords.z;
+
+	oPos = pos0 * w + pos1 * u + pos2 * v;
+}
+		]]>
+	</shader>
+
+	<shader version="5">
+		<![CDATA[
+struct VS_CONTROL_POINT_OUTPUT
+{
+	float3 Pos : POSITION;
+};
+
+VS_CONTROL_POINT_OUTPUT HWTessGenDPShadowMapVS(float4 pos : POSITION)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	
+	VS_CONTROL_POINT_OUTPUT output;
+	output.Pos = pos.xyz;
+	return output;
+}
+		
+struct HS_CONSTANT_DATA_OUTPUT
+{
+	// Tess factor for the FF HW block
+	float edges[3]	: SV_TessFactor;
+	float inside	: SV_InsideTessFactor;
+};
+
+//--------------------------------------------------------------------------------------
+// Constant data function for the HWTessGenDPShadowMapHS.  This is executed once per patch.
+//--------------------------------------------------------------------------------------
+HS_CONSTANT_DATA_OUTPUT HWTessGenDPShadowMapConstantsHS(InputPatch<VS_CONTROL_POINT_OUTPUT, 3> ip)
+{	
+	HS_CONSTANT_DATA_OUTPUT output;
+
+	if (adaptive_tess)
+	{
+		float4 p0 = mul(float4(ip[0].Pos, 1), mvp);
+		float4 p1 = mul(float4(ip[1].Pos, 1), mvp);
+		float4 p2 = mul(float4(ip[2].Pos, 1), mvp);
+		p0.xy /= p0.w;
+		p1.xy /= p1.w;
+		p2.xy /= p2.w;
+		
+		float3 factor;
+		factor.x = length((p1.xy - p0.xy) * tess_edge_length_scale);
+		factor.y = length((p2.xy - p1.xy) * tess_edge_length_scale);
+		factor.z = length((p0.xy - p2.xy) * tess_edge_length_scale);
+		factor = clamp(factor, tess_factors.z, tess_factors.w);
+		
+		// Edge 0
+		output.edges[0] = factor.x;
+		// Edge 1
+		output.edges[1] = factor.y;
+		// Edge 2
+		output.edges[2] = factor.z;
+		// Inside
+		output.inside = (output.edges[0] + output.edges[1] + output.edges[2]) / 3;
+	}
+	else
+	{
+		// Simply output the tessellation factors from constant space 
+		// for use by the FF tessellation unit
+		output.edges[0] = output.edges[1] = output.edges[2] = tess_factors.x;
+		output.inside = tess_factors.y;
+	}
+
+	return output;
+}
+
+struct HS_CONTROL_POINT
+{
+	float3 Pos : POSITION;
+};
+
+[domain("tri")]
+[partitioning("fractional_odd")]
+[outputtopology("triangle_cw")]
+[outputcontrolpoints(3)]
+[patchconstantfunc("HWTessGenDPShadowMapConstantsHS")]
+HS_CONTROL_POINT HWTessGenDPShadowMapHS(InputPatch<VS_CONTROL_POINT_OUTPUT, 3> p, 
+										uint i : SV_OutputControlPointID)
+{
+	HS_CONTROL_POINT output;
+	output.Pos = p[i].Pos;
+	return output;
+}
+
+[domain("tri")]
+void HWTessGenDPShadowMapDS(HS_CONSTANT_DATA_OUTPUT HSConstantData, 
+							float3 bc_coords : SV_DomainLocation,
+							const OutputPatch<HS_CONTROL_POINT, 3> patch,
+
+							out float2 oDist : TEXCOORD0,
+							out float4 oPos : SV_Position)
+{
+	float4 Position = float4(0, 0, 0, 1);
+	InterpolateFlatAttrs(bc_coords,
+				patch[0].Pos, patch[1].Pos, patch[2].Pos,
+				Position.xyz);
+
+	CalcDPSM(Position, oDist, oPos);
+}
+		]]>
+	</shader>
+
+	<technique name="GenDPShadowMapTess5Tech">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="HWTessGenDPShadowMapVS()"/>
+			<state name="hull_shader" value="HWTessGenDPShadowMapHS()"/>
+			<state name="domain_shader" value="HWTessGenDPShadowMapDS()"/>
+			<state name="pixel_shader" value="GenDPShadowMapPS()"/>
+		</pass>
+	</technique>
+
+
+	<parameter type="buffer" elem_type="float4" name="skinned_pos_buf"/>
+	<parameter type="buffer" elem_type="uint" name="index_buf"/>
+
+	<shader type="vertex_shader" version="4">
+		<![CDATA[
+void InstTessGenDPShadowMapVS(float2 barycentric : TEXCOORD1,
+
+					uint instance_id : SV_InstanceID,
+					
+					out float2 oDist : TEXCOORD0,
+					out float4 oPos : SV_Position)
+{
+	uint index0 = index_buf.Load(instance_id * 3 + 0);
+	float3 pos_os0 = skinned_pos_buf.Load(index0).xyz;
+	uint index1 = index_buf.Load(instance_id * 3 + 1);
+	float3 pos_os1 = skinned_pos_buf.Load(index1).xyz;
+	uint index2 = index_buf.Load(instance_id * 3 + 2);
+	float3 pos_os2 = skinned_pos_buf.Load(index2).xyz;
+
+	float4 Position = float4(0, 0, 0, 1);
+	InterpolateFlatAttrs(float3(barycentric, 1 - barycentric.x - barycentric.y),
+				pos_os0, pos_os1, pos_os2, Position.xyz);
+
+	CalcDPSM(Position, oDist, oPos);
+}
+		]]>
+	</shader>
+
+	<technique name="GenDPShadowMapTess4Tech">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="InstTessGenDPShadowMapVS()"/>
+			<state name="pixel_shader" value="GenDPShadowMapPS()"/>
+		</pass>
+	</technique>
+
+
+	<parameter type="float4x4" name="mvps" array_size="6"/>
+
+	<shader version="4">
+		<![CDATA[
+bool frustum_culling(float4 pos0, float4 pos1, float4 pos2)
+{
+	float4 t0 = saturate(pos0.xyxy * float4(-1, -1, 1, 1) - pos0.w);
+	float4 t1 = saturate(pos1.xyxy * float4(-1, -1, 1, 1) - pos1.w);
+	float4 t2 = saturate(pos2.xyxy * float4(-1, -1, 1, 1) - pos2.w);
+	float4 t = t0 * t1 * t2;
+	return !any(t);
+}
+
+struct PS_IN
+{
+	float dist : TEXCOORD0;
+	float4 pos : SV_Position;
+	uint rt_index : SV_RenderTargetArrayIndex;
+};
+
+void GenCubeOneShadowMapVS(float4 Position : POSITION,
+						float4 tangent_quat : TANGENT,
+						out float4 oPos : POSITION,
+						out float oDist : TEXCOORD0)
+{
+	Position = float4(Position.xyz * pos_extent + pos_center, 1);
+	
+	oPos = Position;
+	oDist = calc_dist(Position);
+}
+
+#if KLAYGE_OPENGL
+TRIANGLE TRIANGLE_OUT void GenCubeOneShadowMapGS(AttribArray<float4> in_pos : POSITION, AttribArray<float> in_dist : TEXCOORD0)
+{
+#else
+[maxvertexcount(18)]
+void GenCubeOneShadowMapGS(triangle float4 in_pos[3] : POSITION, triangle float in_dist[3] : TEXCOORD0, inout TriangleStream<PS_IN> out_stream)
+{
+#endif
+	
+	PS_IN output;
+	for (int f = 0; f < 6; ++ f)
+	{
+		output.rt_index = f;
+		
+		float4 pos[3] =
+		{
+			mul(in_pos[0], mvps[f]), mul(in_pos[1], mvps[f]), mul(in_pos[2], mvps[f])
+		};
+		
+		[branch]
+		if (frustum_culling(pos[0], pos[1], pos[2]))
+		{
+			[unroll]
+			for (int v = 0; v < 3; ++ v)
+			{
+				output.pos = pos[v];
+				output.dist = in_dist[v];
+#if KLAYGE_OPENGL
+				emitVertex(output.dist : TEXCOORD0, output.pos : POSITION, output.rt_index : LAYER);
+#else
+				out_stream.Append(output);
+#endif
+			}
+		}
+#if KLAYGE_OPENGL
+		restartStrip();
+#else
+		out_stream.RestartStrip();
+#endif
+	}
+}
+		]]>
+	</shader>
+
+	<technique name="GenCubeOneShadowMap">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="GenCubeOneShadowMapVS()"/>
+			<state name="geometry_shader" value="GenCubeOneShadowMapGS()"/>
+			<state name="pixel_shader" value="GenCubeShadowMapPS()"/>
+		</pass>
+	</technique>
+
+	<shader version="4">
+		<![CDATA[
+void GenCubeOneInstanceShadowMapVS(float4 Position : POSITION,
+						float4 tangent_quat : TANGENT,
+						uint instance_id : SV_InstanceID,
+						out float4 oPos : POSITION,
+						out float2 oDist : TEXCOORD0)
+{
+	Position = float4(Position.xyz * pos_extent + pos_center, 1);
+	
+	oPos = mul(Position, mvps[instance_id]);
+
+	oDist.x = calc_dist(Position);
+#if KLAYGE_OPENGL
+	oDist.y = intBitsToFloat(instance_id);
+#else
+	oDist.y = asfloat(instance_id);
+#endif
+}
+
+#if KLAYGE_OPENGL
+TRIANGLE TRIANGLE_OUT void GenCubeOneInstanceShadowMapGS(AttribArray<float4> in_pos : POSITION, AttribArray<float2> in_dist : TEXCOORD0)
+{
+#else
+[maxvertexcount(3)]
+void GenCubeOneInstanceShadowMapGS(triangle float4 in_pos[3] : POSITION, triangle float2 in_dist[3] : TEXCOORD0, inout TriangleStream<PS_IN> out_stream)
+{
+#endif
+
+	PS_IN output;
+#if KLAYGE_OPENGL
+	output.rt_index = floatToIntBits(in_dist[0].y);
+#else
+	output.rt_index = asuint(in_dist[0].y);
+#endif
+
+	[branch]
+	if (frustum_culling(in_pos[0], in_pos[1], in_pos[2]))
+	{
+		[unroll]
+		for (int v = 0; v < 3; ++ v)
+		{
+			output.pos = in_pos[v];
+			output.dist = in_dist[v].x;
+#if KLAYGE_OPENGL
+			emitVertex(output.dist : TEXCOORD0, output.pos : POSITION, output.rt_index : LAYER);
+#else
+			out_stream.Append(output);
+#endif
+		}
+	}
+}
+		]]>
+	</shader>
+
+	<technique name="GenCubeOneInstanceShadowMap">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="GenCubeOneInstanceShadowMapVS()"/>
+			<state name="geometry_shader" value="GenCubeOneInstanceShadowMapGS()"/>
+			<state name="pixel_shader" value="GenCubeShadowMapPS()"/>
+		</pass>
+	</technique>
+
+	<shader version="5">
+		<![CDATA[
+[maxvertexcount(3)]
+[instance(6)]
+void GenCubeOneInstanceGSShadowMapGS(triangle float4 in_pos[3] : POSITION, triangle float in_dist[3] : TEXCOORD0,
+						uint instance_id : SV_GSInstanceID,
+						inout TriangleStream<PS_IN> out_stream)
+{
+	PS_IN output;
+	output.rt_index = instance_id;
+	
+	float4 pos[3] =
+	{
+		mul(in_pos[0], mvps[instance_id]), mul(in_pos[1], mvps[instance_id]), mul(in_pos[2], mvps[instance_id])
+	};
+
+	[branch]
+	if (frustum_culling(pos[0], pos[1], pos[2]))
+	{
+		[unroll]
+		for (int v = 0; v < 3; ++ v)
+		{
+			output.pos = pos[v];
+			output.dist = in_dist[v];
+			out_stream.Append(output);
+		}
+	}
+}
+		]]>
+	</shader>
+
+	<technique name="GenCubeOneInstanceGSShadowMap">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="GenCubeOneShadowMapVS()"/>
+			<state name="geometry_shader" value="GenCubeOneInstanceGSShadowMapGS()"/>
+			<state name="pixel_shader" value="GenCubeShadowMapPS()"/>
+		</pass>
+	</technique>
+	
+	
+	<parameter type="float3" name="light_pos"/>
+
+	<parameter type="float4" name="ambient_clr"/>
+	<parameter type="float4" name="diffuse_clr"/>
+	<parameter type="float4" name="specular_clr"/>
+	<parameter type="float2" name="shininess_clr"/>
+	<parameter type="float4" name="emit_clr"/>
+
+	<parameter type="texture2D" name="diffuse_tex"/>
+	<parameter type="texture2D" name="specular_tex"/>
+	<parameter type="texture2D" name="shininess_tex"/>
+	<parameter type="texture2D" name="emit_tex"/>
+
+	<parameter type="textureCUBE" name="light_projective_tex"/>
+	<parameter type="textureCUBE" name="shadow_cube_tex"/>
+	<parameter type="texture2D" name="shadow_dual_tex"/>
+
+	<parameter type="sampler" name="linear_wrap_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="wrap"/>
+		<state name="address_v" value="wrap"/>
+	</parameter>
+	<parameter type="sampler" name="linear_clamp_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="float4x4" name="obj_model_to_light_view" />
+
+	<shader>
+		<![CDATA[
+void RenderSceneVS(float4 Position : POSITION,
+					float4 tangent_quat : TANGENT,
+					float2 Texcoord : TEXCOORD0,
+					out float2 oTexcoord : TEXCOORD0,
+					out float3 oLightWorldPos : TEXCOORD1,
+					out float3 oLightWorldNormal : TEXCOORD2,
+					out float3 oLightViewPos : TEXCOORD3,
+					out float4 oPos : SV_Position)
+{
+	Position = float4(Position.xyz * pos_extent + pos_center, 1);
+	Texcoord = Texcoord * tc_extent + tc_center;
+	tangent_quat = tangent_quat * 2 - 1;
+	
+	oTexcoord = Texcoord;
+	oPos = mul(Position, mvp);
+	oLightWorldPos = mul(Position, obj_model_to_light_model).xyz;
+	oLightWorldNormal = mul(transform_quat(float3(0, 0, 1), tangent_quat), (float3x3)obj_model_to_light_model);
+	oLightViewPos = mul(Position, obj_model_to_light_view).xyz;
+}
+
+float4 RenderScenePS(float2 Texcoord : TEXCOORD0, float3 LightWorldPos : TEXCOORD1,
+					float3 LightWorldNormal : TEXCOORD2, float3 LightViewPos : TEXCOORD3) : SV_Target 
+{
+	float3 c_diff, c_spec, emit;
+	float shininess;
+	float opacity;
+	if (diffuse_clr.a > 0.5f)
+	{
+		c_diff = diffuse_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
+	}
+	else
+	{
+		c_diff = diffuse_clr.rgb;
+	}
+	if (specular_clr.a > 0.5f)
+	{
+		c_spec = specular_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
+	}
+	else
+	{
+		c_spec = specular_clr.rgb;
+	}
+	if (shininess_clr.y > 0.5f)
+	{
+		shininess = shininess_tex.Sample(linear_wrap_sampler, Texcoord).r;
+	}
+	else
+	{
+		shininess = shininess_clr.r;
+	}
+	if (emit_clr.a > 0.5f)
+	{
+		emit = emit_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
+	}
+	else
+	{
+		emit = emit_clr.rgb;
+	}
+	
+	float3 light_vec = normalize(-LightWorldPos);
+	float3 normal = normalize(LightWorldNormal);
+	float3 halfway = normalize(light_vec + normal);
+	float3 lighting = calc_brdf(c_diff, c_spec, shininess, light_vec, halfway, normal);
+
+	float3 ori_color = light_projective_tex.Sample(linear_clamp_sampler, LightWorldPos).rgb;
+	float occluder;
+	float dist;
+#if USE_DPSM
+	dist = length(LightViewPos);
+
+	float2 tex = float2(LightViewPos.x * sign(LightViewPos.z), LightViewPos.y) / (dist + abs(LightViewPos.z));
+	tex.y *= KLAYGE_FLIPPING;
+	tex = (tex + 1) / 2;
+	tex.x *= 0.5f;
+	if (LightViewPos.z < 0.0f)
+	{
+		tex.x += 0.5f;
+	}
+
+	occluder = shadow_dual_tex.Sample(linear_clamp_sampler, tex).x;
+#else
+	dist = length(LightWorldPos);
+
+	float3 shadow_dir = float3(LightWorldPos.x, -KLAYGE_FLIPPING * LightWorldPos.y, LightWorldPos.z);
+	occluder = shadow_cube_tex.Sample(linear_clamp_sampler, shadow_dir).x;
+#endif
+	
+	float atten = attenuation_term(0, LightWorldPos, light_falloff);
+	// Exponential shadow mapping
+	atten *= saturate(exp(occluder - esm_scale_factor * dist));
+	
+	float3 clr = ambient_clr.rgb * 0.2f * c_diff + emit + lighting * ori_color * atten;	
+	return float4(clr, 1.0f);
+}
+		]]>
+	</shader>
+
+	<technique name="RenderScene">
+		<pass name="p0">
+			<state name="cull_mode" value="back"/>
+
+			<state name="vertex_shader" value="RenderSceneVS()"/>
+			<state name="pixel_shader" value="RenderScenePS()"/>
+		</pass>
+	</technique>
+	<technique name="RenderSceneDPSM" inherit="RenderScene">
+		<macro name="USE_DPSM" value="1"/>
+	</technique>
+</effect>

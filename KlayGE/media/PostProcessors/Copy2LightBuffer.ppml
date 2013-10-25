@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<post_processors>
+	<post_processor name="CopyToLightBuffer">
+		<params>
+			<param name="scaling_factor"/>
+			<param name="inv_width_height"/>
+			<param name="depth_near_far_invfar"/>
+			<param name="inv_proj"/>
+		</params>
+		<input>
+			<pin name="indirect_lighting_tex"/>
+			<pin name="g_buffer_tex"/>
+			<pin name="g_buffer_1_tex"/>
+			<pin name="depth_tex"/>
+		</input>
+		<output>
+			<pin name="output"/>
+		</output>
+		<shader effect="Copy2LightBuffer.fxml" tech="CopyToLightBuffer"/>
+	</post_processor>
+
+	<post_processor name="CopyToLightBufferI">
+		<params>
+			<param name="scaling_factor"/>
+			<param name="inv_width_height"/>
+			<param name="depth_near_far_invfar"/>
+			<param name="inv_proj"/>
+		</params>
+		<input>
+			<pin name="indirect_lighting_tex"/>
+			<pin name="g_buffer_tex"/>
+			<pin name="g_buffer_1_tex"/>
+			<pin name="depth_tex"/>
+		</input>
+		<output>
+			<pin name="output"/>
+		</output>
+		<shader effect="Copy2LightBuffer.fxml" tech="CopyToLightBufferI"/>
+	</post_processor>
+</post_processors>

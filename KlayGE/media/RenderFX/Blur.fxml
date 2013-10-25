@@ -1,0 +1,191 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="PostProcess.fxml"/>
+	<include name="util.fxml"/>
+
+	<parameter type="texture2D" name="src_tex"/>
+	<parameter type="sampler" name="src_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="float2" name="src_tex_size"/>
+	<parameter type="float" name="color_weight" array_size="8"/>
+	<parameter type="float" name="tex_coord_offset" array_size="8"/>
+
+	<shader>
+		<![CDATA[
+void BlurXVS(float4 pos : POSITION,
+					out float4 oTex0 : TEXCOORD0,
+					out float4 oTex1 : TEXCOORD1,
+					out float4 oTex2 : TEXCOORD2,
+					out float4 oTex3 : TEXCOORD3,
+					out float2 oOriTex : TEXCOORD4,
+					out float4 oPos : SV_Position)
+{
+	oPos = pos;
+	
+	float2 Tex0 = TexCoordFromPos(pos);
+	float4 tex[4];
+	for (int i = 0; i < 4; ++ i)
+	{
+		tex[i] = Tex0.xyxy + float4(tex_coord_offset[i * 2 + 0], 0, tex_coord_offset[i * 2 + 1], 0);
+	}
+	oTex0 = tex[0];
+	oTex1 = tex[1];
+	oTex2 = tex[2];
+	oTex3 = tex[3];
+	oOriTex = Tex0;
+}
+
+void BlurYVS(float4 pos : POSITION,
+					out float4 oTex0 : TEXCOORD0,
+					out float4 oTex1 : TEXCOORD1,
+					out float4 oTex2 : TEXCOORD2,
+					out float4 oTex3 : TEXCOORD3,
+					out float2 oOriTex : TEXCOORD4,
+					out float4 oPos : SV_Position)
+{
+	oPos = pos;
+
+	float2 Tex0 = TexCoordFromPos(pos);
+	float4 tex[4];
+	for (int i = 0; i < 4; ++ i)
+	{
+		tex[i] = Tex0.xyxy + float4(0, tex_coord_offset[i * 2 + 0], 0, tex_coord_offset[i * 2 + 1]);
+	}
+	oTex0 = tex[0];
+	oTex1 = tex[1];
+	oTex2 = tex[2];
+	oTex3 = tex[3];
+	oOriTex = Tex0;
+}
+
+float4 CalcBlur(float4 iTex0, float4 iTex1, float4 iTex2, float4 iTex3, float2 offset)
+{
+	float4 color = float4(0, 0, 0, 1);
+	float4 tex[4] = { iTex0, iTex1, iTex2, iTex3 };
+
+	for (int i = 0; i < 4; ++ i)
+	{
+		tex[i] += offset.xyxy;
+		color.rgb += src_tex.Sample(src_sampler, tex[i].xy).rgb * color_weight[i * 2 + 0];
+		color.rgb += src_tex.Sample(src_sampler, tex[i].zw).rgb * color_weight[i * 2 + 1];
+	}
+
+	return color;
+}
+
+float4 BlurXPS(float4 iTex0 : TEXCOORD0,
+				float4 iTex1 : TEXCOORD1,
+				float4 iTex2 : TEXCOORD2,
+				float4 iTex3 : TEXCOORD3,
+				float2 iOriTex : TEXCOORD4) : SV_Target0
+{
+	float2 offset = float2((floor(iOriTex.x * src_tex_size.x) + 0.5f) * src_tex_size.y - iOriTex.x, 0);
+	return CalcBlur(iTex0, iTex1, iTex2, iTex3, offset);
+}
+
+float4 BlurYPS(float4 iTex0 : TEXCOORD0,
+				float4 iTex1 : TEXCOORD1,
+				float4 iTex2 : TEXCOORD2,
+				float4 iTex3 : TEXCOORD3,
+				float2 iOriTex : TEXCOORD4) : SV_Target0
+{
+	float2 offset = float2(0, (floor(iOriTex.y * src_tex_size.x) + 0.5f) * src_tex_size.y - iOriTex.y);
+	return CalcBlur(iTex0, iTex1, iTex2, iTex3, offset);
+}
+		]]>
+	</shader>
+	
+	<technique name="BlurX">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="BlurXVS()"/>
+			<state name="pixel_shader" value="BlurXPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="BlurY">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="BlurYVS()"/>
+			<state name="pixel_shader" value="BlurYPS()"/>
+		</pass>
+	</technique>
+	
+	
+	<parameter type="float" name="esm_scale_factor"/>
+	<parameter type="float2" name="near_q"/>
+
+	<shader>
+		<![CDATA[
+float4 LogBlurXPS(float2 tc : TEXCOORD0) : SV_Target0
+{
+	float d0 = src_tex.Sample(src_sampler, tc).r;
+#if NON_LINEAR_DEPTH
+	d0 = non_linear_depth_to_linear(d0, near_q.x, near_q.y);
+#endif
+	float w0 = color_weight[7];
+	float color = w0;
+	for (int i = 0; i < 7; ++ i)
+	{
+		float d1 = src_tex.Sample(src_sampler, tc + float2(+tex_coord_offset[i], 0)).r;
+		float d2 = src_tex.Sample(src_sampler, tc + float2(-tex_coord_offset[i], 0)).r;
+#if NON_LINEAR_DEPTH
+		d1 = non_linear_depth_to_linear(d1, near_q.x, near_q.y);
+		d2 = non_linear_depth_to_linear(d2, near_q.x, near_q.y);
+#endif
+		color += (exp(esm_scale_factor * (d1 - d0))
+			+ exp(esm_scale_factor * (d2 - d0))) * color_weight[i];
+	}
+
+	return esm_scale_factor * d0 + log(color);
+}
+
+float4 LogBlurYPS(float2 tc : TEXCOORD0) : SV_Target0
+{
+	float d0 = src_tex.Sample(src_sampler, tc).r;
+	float w0 = color_weight[7];
+	float color = w0;
+	for (int i = 0; i < 7; ++ i)
+	{
+		float d1 = src_tex.Sample(src_sampler, tc + float2(0, +tex_coord_offset[i])).r;
+		float d2 = src_tex.Sample(src_sampler, tc + float2(0, -tex_coord_offset[i])).r;
+		color += (exp(d1 - d0) + exp(d2 - d0)) * color_weight[i];
+	}
+
+	return d0 + log(color);
+}
+		]]>
+	</shader>
+
+	<technique name="LogBlurX">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="LogBlurXPS()"/>
+		</pass>
+	</technique>
+	<technique name="LogBlurXNLD" inherit="LogBlurX">
+		<macro name="NON_LINEAR_DEPTH" value="1"/>
+	</technique>
+
+	<technique name="LogBlurY">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="LogBlurYPS()"/>
+		</pass>
+	</technique>
+</effect>

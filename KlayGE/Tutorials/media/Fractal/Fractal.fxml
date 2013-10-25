@@ -1,0 +1,52 @@
+<?xml version='1.0'?>
+
+<effect>
+	<parameter type="float3" name="clr0"/>
+	<parameter type="float3" name="clr1"/>
+	
+	<shader>
+		<![CDATA[
+void MandelbrotVS(float2 pos : POSITION,
+			out float2 oTexcoord0	: TEXCOORD0,
+			out float4 oPos			: SV_Position)
+{
+	oPos = float4(pos, 0.5f, 1);
+	float2 tc = pos / 2;
+	tc.y *= KLAYGE_FLIPPING;
+	tc += 0.5f;
+	
+	float scale = 2.4f;
+	float2 center = float2(-1.8f, -1.2f);
+	oTexcoord0 = tc * scale + center;
+}
+
+float4 MandelbrotPS(float2 texcoord0 : TEXCOORD0) : SV_Target
+{
+	float2 z = 0;
+	float2 c = texcoord0;
+
+	float r2 = 0;
+	int i;
+	for (i = 0; (i < 40) && (r2 < 4); ++ i)
+	{
+		z = float2(z.x * z.x - z.y * z.y, z.x * z.y + z.y * z.x) + c;
+		r2 = dot(z, z);
+    }
+
+	float3 clr = 0;
+	if (r2 >= 4)
+	{
+		clr = lerp(clr0, clr1, frac(i * 0.05f));
+	}
+	return float4(clr, 1);
+}
+		]]>
+	</shader>
+
+	<technique name="Mandelbrot">
+		<pass name="p0">
+			<state name="vertex_shader" value="MandelbrotVS()"/>
+			<state name="pixel_shader" value="MandelbrotPS()"/>
+		</pass>
+	</technique>
+</effect>

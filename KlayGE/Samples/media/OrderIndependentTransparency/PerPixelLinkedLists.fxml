@@ -1,0 +1,112 @@
+<?xml version='1.0'?>
+
+<effect>
+	<macro name="TEMPORARY_BUFFER_MAX" value="16"/>
+
+	<cbuffer name="per_frame">
+		<parameter type="int" name="frame_width"/>
+	</cbuffer>
+
+	<parameter type="texture2D" name="bg_tex"/>
+	<parameter type="sampler" name="point_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="structured_buffer" elem_type="float4" name="frags_buffer"/>
+	<parameter type="buffer" elem_type="uint" name="start_offset_buffer"/>
+
+	<shader version="5">
+		<![CDATA[
+void RenderPerPixelLinkedListsVS(uint vertex_id : SV_VertexID,
+					out float2 oTex : TEXCOORD0,
+					out float4 oPos : SV_Position)
+{
+	float2 quad_texs[4] = { float2(0, 0), float2(1, 0), float2(0, 1), float2(1, 1) };
+	oTex = quad_texs[vertex_id];
+	
+	oPos.xy = oTex * 2 - 1;
+	oPos.y *= KLAYGE_FLIPPING;
+	oPos.zw = float2(0, 1);
+}
+
+float4 RenderPerPixelLinkedListsPS(float2 tex : TEXCOORD0, float4 pos : SV_Position) : SV_Target
+{
+	uint index = (uint)pos.y * frame_width + (uint)pos.x;
+
+	float4 result = bg_tex.Sample(point_sampler, tex);
+	uint next = start_offset_buffer[index];
+	if (next != 0xFFFFFFFF)
+	{
+		float4 temp_data[TEMPORARY_BUFFER_MAX];
+		uint num_frags = 0;
+
+		while ((num_frags < TEMPORARY_BUFFER_MAX) && (next != 0xFFFFFFFF))
+		{
+			float4 frag_data = frags_buffer[next];
+			temp_data[num_frags] = frag_data;
+			++ num_frags;
+			next = asuint(frag_data.w);
+		}
+
+		uint n2 = 1UL << (uint)(ceil(log2(num_frags)));
+
+		for (uint i = num_frags; i < n2; ++ i)
+		{
+			temp_data[i].z = 1.1f;
+		}
+
+		for (uint merge_size = 2; merge_size <= n2; merge_size <<= 1)
+		{
+			for (uint merge_sub_size = merge_size >> 1; merge_sub_size > 0; merge_sub_size >>= 1)
+			{
+				for (uint elem = 0; elem < n2; ++ elem)
+				{
+					uint swap_elem = elem ^ merge_sub_size;
+					if (swap_elem > elem)
+					{
+						if ((0 == (elem & merge_size)) && (temp_data[elem].z > temp_data[swap_elem].z))
+						{
+							float4 temp = temp_data[elem];
+							temp_data[elem] = temp_data[swap_elem];
+							temp_data[swap_elem] = temp;
+						}
+						if (((elem & merge_size) != 0) && (temp_data[elem].z < temp_data[swap_elem].z))
+						{
+							float4 temp = temp_data[elem];
+							temp_data[elem] = temp_data[swap_elem];
+							temp_data[swap_elem] = temp;
+						}
+					}
+				}
+			}
+		}
+
+		for (int x = num_frags - 1; x >= 0; -- x)
+		{
+			uint2 u16_color = asuint(temp_data[x].xy);
+			float4 color;        
+			color.r = f16tof32(u16_color.x & 0xFFFF);
+			color.g = f16tof32(u16_color.x >> 16);
+			color.b = f16tof32(u16_color.y & 0xFFFF);
+			color.a = f16tof32(u16_color.y >> 16);
+			result.rgb = lerp(result.rgb, color.rgb, color.a);
+		}
+	}
+
+	return result;
+}
+		]]>
+	</shader>
+
+	<technique name="RenderPerPixelLinkedLists">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+			
+			<state name="vertex_shader" value="RenderPerPixelLinkedListsVS()"/>
+			<state name="pixel_shader" value="RenderPerPixelLinkedListsPS()"/>
+		</pass>
+	</technique>
+</effect>

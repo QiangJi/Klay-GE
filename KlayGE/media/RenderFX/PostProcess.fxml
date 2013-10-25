@@ -1,0 +1,23 @@
+<?xml version='1.0'?>
+
+<effect>
+	<shader>
+		<![CDATA[
+float2 TexCoordFromPos(float4 pos)
+{
+	float2 tex = pos.xy / 2;
+	tex.y *= KLAYGE_FLIPPING;
+	tex += 0.5;
+	return tex;
+}
+
+void PostProcessVS(float4 pos : POSITION,
+					out float2 oTex : TEXCOORD0,
+					out float4 oPos : SV_Position)
+{
+	oTex = TexCoordFromPos(pos);
+	oPos = pos;
+}
+		]]>
+	</shader>
+</effect>

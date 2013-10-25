@@ -1,0 +1,36 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="DeferredRenderingUtil.fxml"/>
+	<include name="util.fxml"/>
+	<include name="Quaternion.fxml"/>
+	<include name="GBuffer.fxml"/>
+
+	<shader>
+		<![CDATA[
+void CameraProxyVS(float4 pos : POSITION,
+						float4 tangent_quat : TANGENT,
+			out float4 oPos : SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	oPos = mul(pos, mvp);
+}
+
+float4 CameraProxyPS() : SV_Target
+{
+	return 1;
+}
+		]]>
+	</shader>
+
+	<technique name="CameraProxy">
+		<pass name="p0">
+			<state name="depth_enable" value="true"/>
+
+			<state name="polygon_mode" value="line"/>
+
+			<state name="vertex_shader" value="CameraProxyVS()"/>
+			<state name="pixel_shader" value="CameraProxyPS()"/>
+		</pass>
+	</technique>
+</effect>

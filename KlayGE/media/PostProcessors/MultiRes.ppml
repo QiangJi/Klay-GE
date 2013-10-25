@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<post_processors>
+	<post_processor name="GBuffer2DepthDerivate">
+		<params>
+			<param name="delta_offset"/>
+		</params>
+		<input>
+			<pin name="g_buffer_tex"/>
+			<pin name="depth_tex"/>
+		</input>
+		<output>
+			<pin name="output"/>
+		</output>
+		<shader effect="MultiRes.fxml" tech="GBuffer2DepthDerivate"/>
+	</post_processor>
+
+	<post_processor name="DepthDerivateMipMap">
+		<params>
+			<param name="delta_offset"/>
+			<param name="prev_level"/>
+		</params>
+		<input>
+			<pin name="depth_deriv_tex"/>
+		</input>
+		<output>
+			<pin name="output"/>
+		</output>
+		<shader effect="MultiRes.fxml" tech="DepthDerivateMipMap"/>
+	</post_processor>
+
+	<post_processor name="GBuffer2NormalCone">
+		<params>
+			<param name="delta_offset"/>
+		</params>
+		<input>
+			<pin name="g_buffer_tex"/>
+		</input>
+		<output>
+			<pin name="output"/>
+		</output>
+		<shader effect="MultiRes.fxml" tech="GBuffer2NormalCone"/>
+	</post_processor>
+
+	<post_processor name="NormalConeMipMap">
+		<params>
+			<param name="delta_offset"/>
+			<param name="prev_level"/>
+		</params>
+		<input>
+			<pin name="normal_cone_tex"/>
+		</input>
+		<output>
+			<pin name="output"/>
+		</output>
+		<shader effect="MultiRes.fxml" tech="NormalConeMipMap"/>
+	</post_processor>
+
+	<post_processor name="Upsampling">
+		<params>
+			<param name="delta"/>
+			<param name="cur_lower_level"/>
+		</params>
+		<input>
+			<pin name="src_tex"/>
+		</input>
+		<output>
+			<pin name="output"/>
+		</output>
+		<shader effect="MultiRes.fxml" tech="Upsampling"/>
+	</post_processor>
+</post_processors>

@@ -1,0 +1,27 @@
+SET(SOURCE_FILES
+	${KLAYGE_PROJECT_DIR}/Tools/src/KFontGen/KFontGen.cpp
+)
+
+SET(EXTRA_INCLUDE_DIRS
+	${KLAYGE_PROJECT_DIR}/../External/freetype/include
+	${KLAYGE_PROJECT_DIR}/../kfont/include
+)
+
+SET(EXTRA_LINKED_DIRS
+	${KLAYGE_PROJECT_DIR}/../External/freetype/objs/${KLAYGE_PLATFORM_NAME}
+	${KLAYGE_PROJECT_DIR}/../kfont/lib/${KLAYGE_PLATFORM_NAME}
+)
+
+IF(MSVC)
+	SET(EXTRA_LINKED_LIBRARIES
+		debug freetype250_D optimized freetype250
+		debug kfont_${KLAYGE_COMPILER_NAME}_${KLAYGE_ARCH_NAME}${CMAKE_DEBUG_POSTFIX} optimized kfont_${KLAYGE_COMPILER_NAME}_${KLAYGE_ARCH_NAME}
+	)
+ELSE()
+	SET(EXTRA_LINKED_LIBRARIES ${EXTRA_LINKED_LIBRARIES}
+		freetype250
+		debug kfont_${KLAYGE_COMPILER_NAME}_${KLAYGE_ARCH_NAME}${CMAKE_DEBUG_POSTFIX} optimized kfont_${KLAYGE_COMPILER_NAME}_${KLAYGE_ARCH_NAME}
+		debug boost_program_options-${KLAYGE_COMPILER_NAME}${GCC_VER}-mt-d-${BOOST_VER} optimized boost_program_options-${KLAYGE_COMPILER_NAME}${GCC_VER}-mt-${BOOST_VER})
+ENDIF()
+
+SETUP_TOOL(KFontGen)

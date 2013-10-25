@@ -1,0 +1,69 @@
+<?xml version='1.0'?>
+
+<effect>
+	<shader>
+		<![CDATA[
+float4 StoreGBufferRT0(float3 normal, float shininess)
+{
+	return float4(normal * 0.5f + 0.5f, shininess);
+}
+
+float4 StoreGBufferRT1(float3 diffuse, float3 specular)
+{
+	return float4(diffuse, dot(specular, float3(0.2126f, 0.7152f, 0.0722f)));
+}
+
+void StoreGBufferMRT(float3 normal, float3 specular, float shininess, float3 diffuse,
+			out float4 mrt_0, out float4 mrt_1)
+{
+	mrt_0 = StoreGBufferRT0(normal, shininess);
+	mrt_1 = StoreGBufferRT1(diffuse, specular);
+}
+
+float3 GetNormal(float4 ndc)
+{
+	return normalize(ndc.xyz * 2 - 1);
+}
+
+float GetShininess(float4 ndc)
+{
+	return ndc.w * 256.0f;
+}
+
+
+float3 NearestDepthUpsampling(float2 tc, float4 z_half, float z_full, float2 l1_inv_width_height, float threshold)
+{
+	float4 dist_z = abs(z_half - z_full);
+	float nearest_z = dist_z.x;
+	float2 nearest_tc = tc;
+	if (dist_z.y < nearest_z)
+	{
+		nearest_z = dist_z.y;
+		nearest_tc = tc + float2(l1_inv_width_height.x, 0);
+	}
+	if (dist_z.z < nearest_z)
+	{
+		nearest_z = dist_z.z;
+		nearest_tc = tc + float2(0, l1_inv_width_height.y);
+	}
+	if (dist_z.w < nearest_z)
+	{
+		nearest_z = dist_z.w;
+		nearest_tc = tc + l1_inv_width_height;
+	}
+
+	return float3(nearest_tc, all(dist_z < threshold) ? 1 : -1);
+}
+
+float3 FittingCoord(float3 normal)
+{
+	float3 normal_uns = abs(normal);
+	float max_comp = max(normal_uns.z, max(normal_uns.x, normal_uns.y));
+	float2 tc = normal_uns.z < max_comp ? (normal_uns.y < max_comp ? normal_uns.yz : normal_uns.xz) : normal_uns.xy;
+	tc = tc.x < tc.y ? tc.yx : tc.xy;
+	tc.y /= tc.x;
+	return float3(tc, 1 / max_comp);
+}
+		]]>
+	</shader>
+</effect>

@@ -1,0 +1,70 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="DeferredRenderingUtil.fxml"/>
+	<include name="Lighting.fxml"/>
+	<include name="util.fxml"/>
+	<include name="Quaternion.fxml"/>
+	<include name="GBuffer.fxml"/>
+
+	<parameter type="float4x4" name="model"/>
+	<parameter type="float4" name="light_color"/>
+	<parameter type="int2" name="light_is_projective"/>
+
+	<parameter type="texture2D" name="projective_map_2d_tex"/>
+	<parameter type="textureCUBE" name="projective_map_cube_tex"/>
+
+	<parameter type="sampler" name="linear_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<shader>
+		<![CDATA[
+void LightSourceProxyVS(float4 pos : POSITION,
+						float4 tangent_quat : TANGENT,
+			out float3 oPosOS : TEXCOORD0,
+			out float3 oNormal : TEXCOORD1,
+			out float4 oPos : SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	tangent_quat = tangent_quat * 2 - 1;
+	
+	oPos = mul(pos, mvp);
+	oPosOS = pos.xyz;
+	oNormal = mul(transform_quat(float3(0, 0, 1), tangent_quat), (float3x3)model);
+}
+
+float4 LightSourceProxyPS(float3 pos_os : TEXCOORD0, float3 normal : TEXCOORD1) : SV_Target
+{
+	float4 clr = light_color;
+	if (light_is_projective.x)
+	{
+		float4 proj_clr;
+		if (light_is_projective.y)
+		{
+			proj_clr = projective_map_cube_tex.Sample(linear_sampler, pos_os);
+		}
+		else
+		{
+			float2 tc = pos_os.xy;
+			tc.y *= KLAYGE_FLIPPING;
+			proj_clr = projective_map_2d_tex.Sample(linear_sampler, tc * 0.5f + 0.5f);
+		}
+		clr *= proj_clr;
+	}
+	return (saturate(dot(normalize(normal), float3(0, 1, 0))) + 0.2f) * clr;
+}
+		]]>
+	</shader>
+
+	<technique name="LightSourceProxy">
+		<pass name="p0">
+			<state name="cull_mode" value="back"/>
+
+			<state name="vertex_shader" value="LightSourceProxyVS()"/>
+			<state name="pixel_shader" value="LightSourceProxyPS()"/>
+		</pass>
+	</technique>
+</effect>

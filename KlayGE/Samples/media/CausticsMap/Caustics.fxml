@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+	<include name="util.fxml"/>
+
+	<parameter type="float4x4" name="light_view"/>
+	<parameter type="float4x4" name="light_proj"/>
+	<parameter type="float4x4" name="light_vp"/>
+	<parameter type="float" name="point_size"/>
+
+	<shader>
+		<![CDATA[
+struct CAUSTICS_GS_OUT
+{
+    float2 tc : TEXCOORD0;
+    float4 color : TEXCOORD1;
+    float4 pos : SV_Position;
+};
+		]]>
+	</shader>
+	
+	<shader type="geometry_shader" version="4">
+		<![CDATA[
+#if KLAYGE_OPENGL
+POINT TRIANGLE_OUT void PointGS(AttribArray<float4> in_pos : POSITION, AttribArray<float4> in_color : TEXCOORD0)
+{
+#else
+[maxvertexcount(4)]
+void PointGS(point float4 in_pos[1] : POSITION, point float4 in_color[1] : TEXCOORD0, inout TriangleStream<CAUSTICS_GS_OUT> out_stream)
+{
+#endif
+
+	CAUSTICS_GS_OUT gs_out;
+	float4 point_center = mul(in_pos[0], light_view);
+	gs_out.color = in_color[0];
+	for (int i = 0; i < 4; ++ i)
+	{
+		float2 tex = float2((i & 1) ? 1 : -1, (i & 2) ? -1 : 1);
+
+		gs_out.pos = mul(float4(point_center.xy + point_size * tex, point_center.zw), light_proj);
+		gs_out.tc = tex * 0.5f + 0.5f;
+
+#if KLAYGE_OPENGL
+		emitVertex(gs_out.tc : TEXCOORD0, gs_out.color : TEXCOORD1, gs_out.pos : POSITION);
+#else
+		out_stream.Append(gs_out);
+#endif
+    }
+}
+		]]>
+	</shader>
+
+	<parameter type="float3" name="ttow_x"/>
+	<parameter type="float3" name="ttow_y"/>
+	<parameter type="float4" name="ttow_z"/>
+
+	<parameter type="texture2D" name="t_first_depth"/>
+	<parameter type="texture2D" name="t_first_normals"/>
+	<parameter type="texture2D" name="t_background_depth"/>
+	<parameter type="sampler" name="point_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+	<parameter type="sampler" name="linear_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="texture2D" name="pt_texture"/>
+
+	<parameter type="float2" name="refract_idx"/>
+	<parameter type="float3" name="absorption_idx"/>
+	<parameter type="float3" name="light_pos"/>
+	<parameter type="float3" name="light_color"/>
+	<parameter type="float" name="light_density"/>
+	<parameter type="float" name="inv_occlusion_pixs"/>
+
+	<shader>
+		<![CDATA[
+float2 CalcLookupUV(float4 lookup_proj)
+{   
+	float2 lookup_uv = lookup_proj.xy / lookup_proj.w * 0.5f;
+	lookup_uv.y *= KLAYGE_FLIPPING;
+	lookup_uv += 0.5f;
+	return lookup_uv;
+}
+
+float2 CalcIntersectionPtUV(float3 v, float3 pre_pos, float3 refract_vec)
+{   
+	float3 p = v + distance(v, pre_pos) * refract_vec;
+	float4 lookup_proj = mul(float4(p, 1), light_vp);
+	return CalcLookupUV(lookup_proj);
+}
+
+float3 texcoord_to_world(float2 tex)
+{
+	tex -= 0.5f;
+	return ttow_z.xyz + tex.x * ttow_x + tex.y * ttow_y;
+}
+
+void GenSingleFaceCausticsMap(float2 idx,
+						out float4 oPos, out float4 oColor)
+{
+	float depth;
+	float3 view_dir;
+	
+	depth = t_first_depth.SampleLevel(point_sampler, idx, 0).x;
+	view_dir = texcoord_to_world(float2(idx.x, KLAYGE_FLIPPING < 0 ? idx.y : 1 - idx.y));
+	float3 incident_light = view_dir * (depth / ttow_z.w);
+	float3 surface_pt = incident_light + light_pos;
+	incident_light = normalize(incident_light);
+	float3 surface_n = t_first_normals.SampleLevel(point_sampler, idx, 0).xyz * 2 - 1;
+	float3 refract_light = refract(incident_light, surface_n, refract_idx.y);
+
+	float3 caustics_pt = float3(surface_pt.xy, surface_pt.z + 1);
+
+	//2 steps
+	float2 intersect_uv;
+	intersect_uv = CalcIntersectionPtUV(surface_pt, caustics_pt, refract_light);
+	depth = t_background_depth.SampleLevel(linear_sampler, intersect_uv, 0).x;
+	view_dir = texcoord_to_world(float2(intersect_uv.x, KLAYGE_FLIPPING < 0 ? intersect_uv.y : 1 - intersect_uv.y));
+	caustics_pt = view_dir * (depth / ttow_z.w) + light_pos;
+	intersect_uv = CalcIntersectionPtUV(surface_pt, caustics_pt, refract_light);
+	depth = t_background_depth.SampleLevel(linear_sampler, intersect_uv, 0).x;
+	view_dir = texcoord_to_world(float2(intersect_uv.x, KLAYGE_FLIPPING < 0 ? intersect_uv.y : 1 - intersect_uv.y));
+	caustics_pt = view_dir * (depth / ttow_z.w) + light_pos;
+
+	float dist = distance(caustics_pt, surface_pt);
+	float alpha = dot(surface_n, -incident_light) * inv_occlusion_pixs;
+	float3 clr = light_density * light_color * exp(-dist * absorption_idx);
+
+	oPos = float4(caustics_pt, 1);
+	oColor = float4(clr, alpha);
+}
+
+void GenSingleFaceCausticsMapVS(float2 idx : POSITION,
+									float2 pos : TEXCOORD0,
+									out float2 oTc : TEXCOORD0,
+									out float4 oColor : TEXCOORD1,
+									out float4 oPos : SV_Position)
+{
+	float4 point_center;
+	GenSingleFaceCausticsMap(idx, point_center, oColor);
+
+	point_center = mul(point_center, light_view);
+	oTc = pos * 0.5f + 0.5f;
+	oPos = mul(float4(point_center.xy + point_size * pos, point_center.zw), light_proj);
+}
+
+void GenSingleFaceCausticsMapVS2(float2 idx : POSITION,
+									out float4 oPos : POSITION,
+									out float4 oColor : TEXCOORD0)
+{
+	GenSingleFaceCausticsMap(idx, oPos, oColor);
+}
+
+float4 GenCausticsMapPS(float2 tc : TEXCOORD0, float4 color : TEXCOORD1) : SV_Target
+{
+	return color * pt_texture.Sample(linear_sampler, tc);
+}
+		]]>
+	</shader>
+
+	<technique name="GenSingleFaceCausticsMap">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+
+			<state name="blend_enable" value="true"/>
+			<state name="blend_op" value="add"/>
+			<state name="src_blend" value="src_alpha"/>
+			<state name="dest_blend" value="one"/>
+			<state name="blend_op_alpha" value="add"/>
+			<state name="src_blend_alpha" value="one"/>
+			<state name="dest_blend_alpha" value="one"/>
+
+			<state name="polygon_mode" value="fill"/>
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="GenSingleFaceCausticsMapVS()"/>
+			<state name="pixel_shader" value="GenCausticsMapPS()"/>
+		</pass>
+	</technique>
+	
+	<technique name="GenSingleFaceCausticsMapWithGS">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			
+			<state name="blend_enable" value="true"/>
+			<state name="blend_op" value="add"/>
+			<state name="src_blend" value="src_alpha"/>
+			<state name="dest_blend" value="one"/>
+			<state name="blend_op_alpha" value="add"/>
+			<state name="src_blend_alpha" value="one"/>
+			<state name="dest_blend_alpha" value="one"/>
+
+			<state name="polygon_mode" value="fill"/>
+			<state name="cull_mode" value="none"/>
+			
+			<state name="vertex_shader" value="GenSingleFaceCausticsMapVS2()"/>
+			<state name="geometry_shader" value="PointGS()"/>
+			<state name="pixel_shader" value="GenCausticsMapPS()"/>
+		</pass>
+	</technique>
+
+	<parameter type="texture2D" name="t_second_depth"/>
+	<parameter type="texture2D" name="t_second_normals"/>
+	
+	<shader>
+		<![CDATA[
+void GenDualFaceCausticsMap(float2 idx,
+							out float4 oPos, out float4 oColor)
+{
+	float depth;
+	float3 view_dir;
+	
+	depth = t_first_depth.SampleLevel(point_sampler, idx, 0).x;
+	view_dir = texcoord_to_world(float2(idx.x, KLAYGE_FLIPPING < 0 ? idx.y : 1 - idx.y));
+	float3 incident_light = view_dir * (depth / ttow_z.w);
+	float3 surface_pt = incident_light + light_pos;
+	incident_light = normalize(incident_light);
+	float3 surface_n = t_first_normals.SampleLevel(point_sampler, idx, 0).xyz * 2 - 1;
+	float3 refract_light = refract(incident_light, surface_n, refract_idx.y);
+
+	float3 first_pt = surface_pt;
+	float3 first_n = surface_n;
+	float3 fisrt_incident_light = incident_light;
+
+	float3 caustics_pt = float3(surface_pt.xy, surface_pt.z + 1);
+
+	//2 steps first refract
+	float2 intersect_uv;
+	
+	intersect_uv = CalcIntersectionPtUV(surface_pt, caustics_pt, refract_light);
+	depth = t_second_depth.SampleLevel(linear_sampler, intersect_uv, 0).x;
+	view_dir = texcoord_to_world(float2(intersect_uv.x, KLAYGE_FLIPPING < 0 ? intersect_uv.y : 1 - intersect_uv.y));
+	caustics_pt = view_dir * (depth / ttow_z.w) + light_pos;
+	intersect_uv = CalcIntersectionPtUV(surface_pt, caustics_pt, refract_light);
+	depth = t_second_depth.SampleLevel(linear_sampler, intersect_uv, 0).x;
+	view_dir = texcoord_to_world(float2(intersect_uv.x, KLAYGE_FLIPPING < 0 ? intersect_uv.y : 1 - intersect_uv.y));
+	caustics_pt = view_dir * (depth / ttow_z.w) + light_pos;
+
+	surface_pt = caustics_pt;
+
+	float4 lookup_proj = mul(float4(surface_pt, 1), light_vp);
+	surface_n = -(t_second_normals.SampleLevel(linear_sampler, CalcLookupUV(lookup_proj), 0).xyz * 2 - 1);
+
+	incident_light = normalize(surface_pt - first_pt);
+	refract_light = refract(incident_light, surface_n, refract_idx.x);
+
+	caustics_pt = float3(surface_pt.xy, surface_pt.z + 1);
+
+	//2 steps second refract
+	intersect_uv = CalcIntersectionPtUV(surface_pt, caustics_pt, refract_light);
+	depth = t_background_depth.SampleLevel(linear_sampler, intersect_uv, 0).x;
+	view_dir = texcoord_to_world(float2(intersect_uv.x, KLAYGE_FLIPPING < 0 ? intersect_uv.y : 1 - intersect_uv.y));
+	caustics_pt = view_dir * (depth / ttow_z.w) + light_pos;
+	intersect_uv = CalcIntersectionPtUV(surface_pt, caustics_pt, refract_light);
+	depth = t_background_depth.SampleLevel(linear_sampler, intersect_uv, 0).x;
+	view_dir = texcoord_to_world(float2(intersect_uv.x, KLAYGE_FLIPPING < 0 ? intersect_uv.y : 1 - intersect_uv.y));
+	caustics_pt = view_dir * (depth / ttow_z.w) + light_pos;
+
+	float dist = distance(caustics_pt, first_pt);
+	float alpha = dot(first_n, -fisrt_incident_light) * inv_occlusion_pixs;
+	float3 clr = light_density * light_color * exp(-dist * absorption_idx);
+
+	oPos = float4(caustics_pt, 1);
+	oColor = float4(clr, alpha);
+}
+
+void GenDualFaceCausticsMapVS(float2 idx : POSITION,
+									float2 pos : TEXCOORD0,
+									out float2 oTc : TEXCOORD0,
+									out float4 oColor : TEXCOORD1,
+									out float4 oPos : SV_Position)
+{
+	float4 point_center;
+	GenDualFaceCausticsMap(idx, point_center, oColor);
+
+	point_center = mul(point_center, light_view);
+	oTc = pos * 0.5f + 0.5f;
+	oPos = mul(float4(point_center.xy + point_size * pos, point_center.zw), light_proj);
+}
+
+void GenDualFaceCausticsMapVS2(float2 idx : POSITION,
+									out float4 oPos : POSITION,
+									out float4 oColor : TEXCOORD0)
+{
+	GenDualFaceCausticsMap(idx, oPos, oColor);
+}
+		]]>
+	</shader>
+
+	<technique name="GenDualFaceCausticsMap" inherit="GenSingleFaceCausticsMap">
+		<pass name="p0">
+			<state name="vertex_shader" value="GenDualFaceCausticsMapVS()"/>
+		</pass>
+	</technique>
+	<technique name="GenDualFaceCausticsMapWithGS" inherit="GenSingleFaceCausticsMapWithGS">
+		<pass name="p0">
+			<state name="vertex_shader" value="GenDualFaceCausticsMapVS2()"/>
+		</pass>
+	</technique>
+</effect>

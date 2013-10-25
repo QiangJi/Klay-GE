@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+	<include name="DeferredRenderingUtil.fxml"/>
+	<include name="Lighting.fxml"/>
+	<include name="Quaternion.fxml"/>
+
+	<parameter type="sampler" name="point_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="texture2D" name="vpls_tex"/>
+	<parameter type="texture2D" name="gbuffer_tex"/>
+	<parameter type="texture2D" name="depth_tex"/>
+
+	<parameter type="float2" name="vpl_params"/>
+
+	<cbuffer name="per_frame">
+		<parameter type="float4x4" name="view"/>
+		<parameter type="float4x4" name="proj"/>
+		<parameter type="float3" name="depth_near_far_invfar"/>
+
+		<parameter type="float4" name="light_pos_es"/>
+		<parameter type="float4" name="light_color"/>
+		<parameter type="float3" name="light_falloff"/>
+	</cbuffer>
+
+	<cbuffer name="per_vpl">
+		<parameter type="float" name="x_coord"/>
+	</cbuffer>
+
+	<shader>
+		<![CDATA[
+#if KLAYGE_D3D11
+#if KLAYGE_SHADER_MODEL >= 4
+#define NOPERSPECTIVE_SUPPORT
+#endif
+#endif
+
+void CalcVPLsLightingShape(float4 pos,
+				float vpl_x_coord,
+#ifdef NOPERSPECTIVE_SUPPORT
+				out float2 oTc,
+#else
+				out float3 oTc,
+#endif
+				out float3 oVPLColor,
+				out float4 oViewDir,
+				out float4 oPos)
+{
+	oViewDir.w = vpl_x_coord;
+
+	float4 albedo = vpls_tex.SampleLevel(point_sampler, float2(oViewDir.w, 0.5f / 4), 0);
+  
+	if (albedo.x < 0)
+	{
+		oVPLColor = -1;
+		oPos = float4(-1, -1, -1, 0);
+		oViewDir = 0;
+		oTc = 0;
+	}
+	else
+	{
+		float4 normal = vpls_tex.SampleLevel(point_sampler, float2(oViewDir.w, 1.5f / 4), 0);
+		float4 offset = vpls_tex.SampleLevel(point_sampler, float2(oViewDir.w, 2.5f / 4), 0);
+		float4 rotation = vpls_tex.SampleLevel(point_sampler, float2(oViewDir.w, 3.5f / 4), 0);
+
+		float3 rot_pos = mul(transform_quat(pos.xyz, rotation), (float3x3)view);
+
+		float3 light_vec = normalize(light_pos_es.xyz - offset.xyz);
+		float3 view_vec = normalize(rot_pos);
+		float3 halfway = normalize(light_vec + view_vec);
+
+		oVPLColor = albedo.w * light_color.xyz * (albedo.xyz + specular_term(normal.w, light_vec, halfway, normal.xyz, offset.w));
+
+		float scale = sqrt(oVPLColor.x + oVPLColor.y + oVPLColor.z) * 10;
+		oViewDir.xyz = rot_pos * scale + offset.xyz;
+		oPos = mul(float4(oViewDir.xyz, 1), proj);
+
+		oTc.xy = oPos.xy / oPos.w * 0.5f;
+		oTc.y *= KLAYGE_FLIPPING;
+		oTc.xy += 0.5f;
+
+#ifndef NOPERSPECTIVE_SUPPORT
+		oTc.z = oPos.w;
+		oTc.xy *= oTc.z;
+#endif
+	}
+}
+
+void VPLsLightingInstanceIDVS(float4 pos : POSITION,
+				uint instance_id : SV_InstanceID,
+#ifdef NOPERSPECTIVE_SUPPORT
+				out noperspective float2 oTc : TEXCOORD0,
+#else
+				out float3 oTc : TEXCOORD0,
+#endif
+				out float3 oVPLColor : TEXCOORD1,
+				out float4 oViewDir : TEXCOORD2,
+				out float4 oPos : SV_Position)
+{
+	CalcVPLsLightingShape(pos, (instance_id + 0.5f) * vpl_params.x,
+			oTc, oVPLColor, oViewDir, oPos);
+}
+
+void VPLsLightingNoInstanceIDVS(float4 pos : POSITION,
+#ifdef NOPERSPECTIVE_SUPPORT
+				out noperspective float2 oTc : TEXCOORD0,
+#else
+				out float3 oTc : TEXCOORD0,
+#endif
+				out float3 oVPLColor : TEXCOORD1,
+				out float4 oViewDir : TEXCOORD2,
+				out float4 oPos : SV_Position)
+{
+	CalcVPLsLightingShape(pos, x_coord,
+			oTc, oVPLColor, oViewDir, oPos);
+}
+
+float4 VPLsLightingPS(
+#ifdef NOPERSPECTIVE_SUPPORT
+	noperspective float2 tc : TEXCOORD0,
+#else
+	float3 tc_w : TEXCOORD0,
+#endif
+	float3 vpl_color : TEXCOORD1, float4 view_dir : TEXCOORD2
+	) : SV_Target
+{
+#ifndef NOPERSPECTIVE_SUPPORT
+	float2 tc = tc_w.xy / tc_w.z;
+#endif
+
+	float pixel_depth = depth_tex.Sample(point_sampler, tc).r;
+	float3 color_i = 0;
+	clip(view_dir.z - pixel_depth);
+
+	float3 norm_i = GetNormal(gbuffer_tex.Sample(point_sampler, tc));
+	float3 pos_i = view_dir.xyz * (pixel_depth / view_dir.z);
+
+	float3 pos_j = vpls_tex.SampleLevel(point_sampler, float2(view_dir.w, 2.5f / 4), 0).xyz;
+
+	float3 vij = normalize(pos_j - pos_i);
+	float cos_iv = dot(norm_i, vij);
+	if (cos_iv > 0)
+	{
+		float atten = attenuation_term(pos_j, pos_i, float3(1, 0, 1));
+		color_i = cos_iv * atten * vpl_color;
+	}
+
+	return float4(color_i, 1);
+}
+		]]>
+	</shader>
+
+	<technique name="VPLsLightingInstanceID">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="depth_clip_enable" value="false"/>
+			<state name="cull_mode" value="front"/>
+
+			<state name="front_stencil_enable" value="true"/>
+			<state name="front_stencil_func" value="equal"/>
+			<state name="front_stencil_ref" value="0"/>
+			<state name="front_stencil_pass" value="keep"/>
+			<state name="front_stencil_write_mask" value="0"/>
+			<state name="back_stencil_enable" value="true"/>
+			<state name="back_stencil_func" value="equal"/>
+			<state name="back_stencil_ref" value="0"/>
+			<state name="back_stencil_pass" value="keep"/>
+			<state name="back_stencil_write_mask" value="0"/>
+
+			<state name="blend_enable" value="true"/>
+			<state name="blend_op" value="add"/>
+			<state name="src_blend" value="one"/>
+			<state name="dest_blend" value="one"/>
+			<state name="blend_op_alpha" value="add"/>
+			<state name="src_blend_alpha" value="one"/>
+			<state name="dest_blend_alpha" value="zero"/>
+
+			<state name="vertex_shader" value="VPLsLightingInstanceIDVS()"/>
+			<state name="pixel_shader" value="VPLsLightingPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="VPLsLightingNoInstanceID" inherit="VPLsLightingInstanceID">
+		<pass name="p0">
+			<state name="vertex_shader" value="VPLsLightingNoInstanceIDVS()"/>
+		</pass>
+	</technique>
+</effect>

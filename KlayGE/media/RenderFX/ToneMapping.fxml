@@ -1,0 +1,150 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="PostProcess.fxml"/>
+	<include name="util.fxml"/>
+	
+	<macro name="RGB_TO_LUM" value="float3(0.2126f, 0.7152f, 0.0722f)"/>
+
+	<parameter type="sampler" name="linear_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="sampler" name="point_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="texture2D" name="src_tex"/>
+	<parameter type="texture2D" name="lum_tex"/>
+	<parameter type="texture2D" name="bloom_tex"/>
+
+	<shader>
+		<![CDATA[
+float EyeAdaption(float lum)
+{
+	return lerp(0.2f, lum, 0.5f);
+}
+
+float3 F(float3 x)
+{
+	const float A = 0.22f;
+	const float B = 0.30f;
+	const float C = 0.10f;
+	const float D = 0.20f;
+	const float E = 0.01f;
+	const float F = 0.30f;
+
+	return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+float3 ToneMapping(float3 color, float3 blur, float adapted_lum)
+{
+	const float3 BLUE_SHIFT = float3(0.4f, 0.4f, 0.7f);
+
+	color += blur * 0.25f;
+	
+	float lum = dot(color, RGB_TO_LUM);
+	
+	// martin's modified blue shift
+	color = lerp(lum * BLUE_SHIFT, color, saturate(16.0f * lum));
+
+#if NO_FP_TEXTURE
+	return color;
+#else
+	float adapted_lum_dest = 3 / (max(0.1f, 1 + 10 * EyeAdaption(adapted_lum)));
+
+	// Filmic Tonemapping from Unchart 2
+	const float White = 11.2f;
+	return F(1.6f * adapted_lum_dest * color) / F(White);
+#endif
+}
+
+float4 ToneMapping20PS(float2 iTex : TEXCOORD0) : SV_Target
+{
+#if NO_FP_TEXTURE
+	float adapted_lum = 1;
+#else
+#if PACK_TO_RGBA
+	float adapted_lum = DecodeFloatRGBA(lum_tex.Sample(point_sampler, 0.5f.xx)) * 16;
+#else
+	float adapted_lum = lum_tex.Sample(point_sampler, 0.5f.xx).r;
+#endif
+#endif
+	float lum = max(0.001f, adapted_lum);
+	// For FXAA
+	float3 ldr_rgb = saturate(ToneMapping(src_tex.Sample(linear_sampler, iTex).rgb, bloom_tex.Sample(linear_sampler, iTex).rgb, lum));
+	return float4(ldr_rgb, dot(ldr_rgb, RGB_TO_LUM));
+}
+		]]>
+	</shader>
+
+	<shader version="3">
+		<![CDATA[		
+void ToneMapping30VS(float4 pos : POSITION,
+					out float3 oTex : TEXCOORD0,
+					out float4 oPos : SV_Position)
+{
+	oPos = pos;
+
+	oTex.xy = TexCoordFromPos(pos);
+#if NO_FP_TEXTURE
+	float adapted_lum = 1;
+#else
+#if PACK_TO_RGBA
+	float adapted_lum = DecodeFloatRGBA(lum_tex.SampleLevel(point_sampler, 0.5f.xx, 0)) * 16;
+#else
+	float adapted_lum = lum_tex.SampleLevel(point_sampler, 0.5f.xx, 0).r;
+#endif
+#endif
+	oTex.z = max(0.001f, adapted_lum);
+}
+
+float4 ToneMapping30PS(float3 iTex : TEXCOORD0) : SV_Target
+{
+	// For FXAA
+	float3 ldr_rgb = saturate(ToneMapping(src_tex.Sample(linear_sampler, iTex.xy).rgb, bloom_tex.Sample(linear_sampler, iTex.xy).rgb, iTex.z));
+	return float4(ldr_rgb, dot(ldr_rgb, RGB_TO_LUM));
+}
+		]]>
+	</shader>
+
+	<technique name="ToneMapping20">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="ToneMapping20PS()"/>
+		</pass>
+	</technique>
+
+	<technique name="ToneMapping20Pack" inherit="ToneMapping20">
+		<macro name="PACK_TO_RGBA" value="1"/>
+	</technique>
+
+	<technique name="ToneMapping20NoFP" inherit="ToneMapping20">
+		<macro name="NO_FP_TEXTURE" value="1"/>
+	</technique>
+
+	<technique name="ToneMapping30">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="0"/>
+
+			<state name="vertex_shader" value="ToneMapping30VS()"/>
+			<state name="pixel_shader" value="ToneMapping30PS()"/>
+		</pass>
+	</technique>
+
+	<technique name="ToneMapping30Pack" inherit="ToneMapping30">
+		<macro name="PACK_TO_RGBA" value="1"/>
+	</technique>
+
+	<technique name="ToneMapping30NoFP" inherit="ToneMapping20">
+		<macro name="NO_FP_TEXTURE" value="1"/>
+	</technique>
+</effect>

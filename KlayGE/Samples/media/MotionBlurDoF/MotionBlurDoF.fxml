@@ -1,0 +1,191 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="Lighting.fxml"/>
+	<include name="Quaternion.fxml"/>
+	<include name="PostProcess.fxml"/>
+
+	<cbuffer name="per_frame">
+		<parameter type="float4x4" name="view"/>
+		<parameter type="float4x4" name="proj"/>
+		<parameter type="float3" name="light_in_world" x="2" y="2" z="-3"/>
+		<parameter type="float3" name="eye_in_world"/>
+		<parameter type="float" name="elapsed_time"/>
+		<parameter type="float3" name="pos_center"/>
+		<parameter type="float3" name="pos_extent"/>
+	</cbuffer>
+
+	<parameter type="float4x4" name="modelmat" semantic="WORLD"/>
+	<parameter type="float4x4" name="last_modelmat"/>
+	<parameter type="float4" name="color"/>
+
+	<shader>
+		<![CDATA[
+void ColorDepthInstancedVS(float4 pos			: POSITION,
+					float4 tangent_quat		: TANGENT,
+
+					float4 row0			: TEXCOORD1,
+					float4 row1			: TEXCOORD2,
+					float4 row2			: TEXCOORD3,
+					float4 last_row0	: TEXCOORD4,
+					float4 last_row1	: TEXCOORD5,
+					float4 last_row2	: TEXCOORD6,
+					float3 clr			: COLOR0,
+
+					out float3 oClr : TEXCOORD0,
+					out float3 oPosWS : TEXCOORD1,
+					out float3 oNormalWS : TEXCOORD2,
+					out float3 oLightVecWS : TEXCOORD3,
+					out float3 oHalfwayVecWS : TEXCOORD4,
+					out float4 oPos		: SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+
+	float4x4 model = { row0, row1, row2, float4(0, 0, 0, 1) };
+
+	float4 pos_ws = mul(model, pos);
+	float3 normal = mul((float3x3)model, transform_quat(float3(0, 0, 1), tangent_quat * 2 - 1));
+	oPos = mul(mul(pos_ws, view), proj);
+	oPosWS = pos_ws.xyz;
+	oNormalWS = normal;
+	oClr = clr;
+	
+	oLightVecWS = light_in_world - pos_ws.xyz;
+	float3 view_vec = eye_in_world - pos_ws.xyz;
+	oHalfwayVecWS = normalize(oLightVecWS) + normalize(view_vec);
+}
+
+void ColorDepthNonInstancedVS(float4 pos			: POSITION,
+					float4 tangent_quat		: TANGENT,
+
+					out float3 oClr : TEXCOORD0,
+					out float3 oPosWS : TEXCOORD1,
+					out float3 oNormalWS : TEXCOORD2,
+					out float3 oLightVecWS : TEXCOORD3,
+					out float3 oHalfwayVecWS : TEXCOORD4,
+					out float4 oPos		: SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	tangent_quat = tangent_quat * 2 - 1;
+	
+	float4 pos_ws = mul(pos, modelmat);
+	float3 normal = mul(transform_quat(float3(0, 0, 1), tangent_quat), (float3x3)modelmat);
+	oPos = mul(mul(pos_ws, view), proj);
+	oPosWS = pos_ws.xyz;
+	oNormalWS = normal;
+	oClr.xyz = color.rgb;
+	
+	oLightVecWS = light_in_world - pos_ws.xyz;
+	float3 view_vec = eye_in_world - pos_ws.xyz;
+	oHalfwayVecWS = normalize(oLightVecWS) + normalize(view_vec);
+}
+
+float4 ColorDepthPS(float3 clr : TEXCOORD0, float3 pos_ws : TEXCOORD1, float3 normal_ws : TEXCOORD2,
+	float3 light_vec_ws : TEXCOORD3, float3 halfway_vec_ws : TEXCOORD4) : SV_Target
+{
+	light_vec_ws = normalize(light_vec_ws);
+	halfway_vec_ws = normalize(halfway_vec_ws);
+	normal_ws = normalize(normal_ws);
+	
+	return float4(0.05f * clr + calc_brdf(clr, 0.2f, 35, light_vec_ws, halfway_vec_ws, normal_ws), 1);
+}
+		]]>
+	</shader>
+
+	<technique name="ColorDepthInstanced">
+		<pass name="p0">
+			<state name="vertex_shader" value="ColorDepthInstancedVS()"/>
+			<state name="pixel_shader" value="ColorDepthPS()"/>
+		</pass>
+	</technique>
+	
+	<technique name="ColorDepthNonInstanced">
+		<pass name="p0">
+			<state name="vertex_shader" value="ColorDepthNonInstancedVS()"/>
+			<state name="pixel_shader" value="ColorDepthPS()"/>
+		</pass>
+	</technique>
+
+	<cbuffer name="per_frame">
+		<parameter type="float4x4" name="prev_view"/>
+		<parameter type="float4x4" name="prev_proj"/>
+	</cbuffer>
+	
+	<shader>
+		<![CDATA[
+void CalcMotionVector(float4 pos_curr, float4 pos_prev, float3 normal_es,
+					out float2 oVelocity, out float4 oPos)
+{
+	pos_curr = mul(pos_curr, view);
+	pos_prev = mul(pos_prev, prev_view);
+	float3 motion_vec = pos_curr.xyz - pos_prev.xyz;
+	
+	pos_curr = mul(pos_curr, proj);
+	pos_prev = mul(pos_prev, prev_proj);
+	oPos = dot(motion_vec, normal_es) > 0 ? pos_curr : pos_prev;
+	
+	pos_curr /= pos_curr.w;
+	pos_prev /= pos_prev.w;
+	oVelocity = (pos_curr.xy - pos_prev.xy) / (elapsed_time * 60);
+}
+
+void MotionVectorInstancedVS(float4 pos			: POSITION,
+					float4 tangent_quat		: TANGENT,
+
+					float4 row0			: TEXCOORD1,
+					float4 row1			: TEXCOORD2,
+					float4 row2			: TEXCOORD3,
+					float4 last_row0	: TEXCOORD4,
+					float4 last_row1	: TEXCOORD5,
+					float4 last_row2	: TEXCOORD6,
+					float3 clr			: COLOR0,
+
+					out float2 oVelocity : TEXCOORD0,
+					out float4 oPos		: SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	tangent_quat = tangent_quat * 2 - 1;
+	
+	float4x4 model = { row0, row1, row2, float4(0, 0, 0, 1) };
+	float4x4 last_model = { last_row0, last_row1, last_row2, float4(0, 0, 0, 1) };
+
+	float3 normal = mul(mul((float3x3)model, transform_quat(float3(0, 0, 1), tangent_quat)), (float3x3)view);
+	CalcMotionVector(mul(model, pos), mul(last_model, pos), normal, oVelocity, oPos);
+}
+
+void MotionVectorNonInstancedVS(float4 pos			: POSITION,
+					float4 tangent_quat		: TANGENT,
+
+					out float2 oVelocity : TEXCOORD0,
+					out float4 oPos		: SV_Position)
+{
+	pos = float4(pos.xyz * pos_extent + pos_center, 1);
+	tangent_quat = tangent_quat * 2 - 1;
+	
+	float4 pos_ws = mul(pos, modelmat);
+	float3 normal = mul(mul(transform_quat(float3(0, 0, 1), tangent_quat), (float3x3)modelmat), (float3x3)view);
+	CalcMotionVector(mul(pos, modelmat), mul(pos, last_modelmat), normal, oVelocity, oPos);
+}
+
+float4 MotionVectorPS(float2 velocity : TEXCOORD0) : SV_Target
+{
+	velocity.y *= KLAYGE_FLIPPING;
+	return float4(velocity * 10 + 0.5f, 1, 1);
+}
+		]]>
+	</shader>
+
+	<technique name="MotionVectorInstanced">
+		<pass name="p0">
+			<state name="vertex_shader" value="MotionVectorInstancedVS()"/>
+			<state name="pixel_shader" value="MotionVectorPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="MotionVectorNonInstanced">
+		<pass name="p0">
+			<state name="vertex_shader" value="MotionVectorNonInstancedVS()"/>
+			<state name="pixel_shader" value="MotionVectorPS()"/>
+		</pass>
+	</technique>
+</effect>

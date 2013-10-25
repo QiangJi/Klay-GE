@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+
+<model version="4">
+       <materials_chunk>
+		<material ambient_r="0.752941" ambient_g="0.752941" ambient_b="0.752941" diffuse_r="1" diffuse_g="1" diffuse_b="1" specular_r="0" specular_g="0" specular_b="0" emit_r="0" emit_g="0" emit_b="0" opacity="1" specular_level="1" shininess="0.2">
+		</material>
+	</materials_chunk>
+	<meshes_chunk>
+		<mesh name="Plane" mtl_id="0">
+			<vertices_chunk>
+				<vertex x="-1" y="0" z="-1">
+					<normal x="0" y="1" z="0"/>
+					<tangent x="1" y="0" z="0"/>
+					<tex_coord u="0" v="0"/>
+				</vertex>
+				<vertex x="1" y="0" z="-1">
+					<normal x="0" y="1" z="0"/>
+					<tangent x="1" y="0" z="0"/>
+					<tex_coord u="1" v="0"/>
+				</vertex>
+				<vertex x="1" y="0" z="1">
+					<normal x="0" y="1" z="0"/>
+					<tangent x="1" y="0" z="0"/>
+					<tex_coord u="1" v="1"/>
+				</vertex>
+				<vertex x="-1" y="0" z="1">
+					<normal x="0" y="1" z="0"/>
+					<tangent x="1" y="0" z="0"/>
+					<tex_coord u="0" v="1"/>
+				</vertex>
+			</vertices_chunk>
+			<triangles_chunk>
+				<triangle a="0" b="2" c="1"/>
+				<triangle a="2" b="0" c="3"/>
+			</triangles_chunk>
+		</mesh>
+	</meshes_chunk>
+</model>

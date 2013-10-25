@@ -1,0 +1,545 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="PostProcess.fxml"/>
+
+	<parameter type="sampler" name="point_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+
+	<parameter type="texture2D" name="real_tex"/>
+	<parameter type="texture2D" name="imag_tex"/>
+	<parameter type="texture2D" name="lookup_i_wr_wi"/>
+
+	<parameter type="float" name="scale"/>
+
+	<shader>
+		<![CDATA[
+void FFTUnit(float2 r1, float2 r2, float wr, float wi,
+				out float4 oReal, out float4 oImag)
+{
+	float4 input_r1 = real_tex.Sample(point_sampler, r1);
+	float4 input_i1 = imag_tex.Sample(point_sampler, r1);
+
+	float4 input_r2 = real_tex.Sample(point_sampler, r2);
+	float4 input_i2 = imag_tex.Sample(point_sampler, r2);
+
+	float4 res_r = wr * input_r2 - wi * input_i2;
+	float4 res_i = wi * input_r2 + wr * input_i2;
+
+	oReal = input_r1 + res_r;
+	oImag = input_i1 + res_i;
+}
+
+void FFTXPS(float2 tc : TEXCOORD0,
+				out float4 oReal : SV_Target0,
+				out float4 oImag : SV_Target1)
+{
+	float4 i_wr_wi = lookup_i_wr_wi.Sample(point_sampler, tc);
+	
+	float2 r1 = float2(i_wr_wi.x, tc.y);
+	float2 r2 = float2(i_wr_wi.y, tc.y);
+
+	FFTUnit(r1, r2, i_wr_wi.z, i_wr_wi.w,
+		oReal, oImag);
+}
+
+void FFTYPS(float2 tc : TEXCOORD0,
+				out float4 oReal : SV_Target0,
+				out float4 oImag : SV_Target1)
+{
+	float4 i_wr_wi = lookup_i_wr_wi.Sample(point_sampler, tc);
+	
+	float2 r1 = float2(tc.x, i_wr_wi.x);
+	float2 r2 = float2(tc.x, i_wr_wi.y);
+
+	FFTUnit(r1, r2, i_wr_wi.z, i_wr_wi.w,
+		oReal, oImag);
+	
+	if (scale > 0)
+	{
+		oReal *= scale;
+		oImag *= scale;
+	}
+}
+		]]>
+	</shader>
+
+	<technique name="FFTX">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="FFTXPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="FFTY">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="FFTYPS()"/>
+		</pass>
+	</technique>
+
+
+	<macro name="COS_PI_4_16" value="0.70710678118654752440084436210485"/>
+	<macro name="COHERENCY_GRANULARITY" value="128"/>
+	<macro name="BLOCK_SIZE_X" value="16"/>
+	<macro name="BLOCK_SIZE_Y" value="16"/>
+
+	<parameter type="int" name="forward"/>
+
+	<parameter type="uint2" name="tex_width_height"/>
+	<parameter type="uint3" name="addr_offset"/>
+
+	<parameter type="structured_buffer" elem_type="float2" name="input_buf"/>
+
+	<shader>
+		<![CDATA[
+void QuadVS(float2 vPos : POSITION,
+		out float2 TexCoord : TEXCOORD0,
+		out float4 Position : SV_Position)
+{
+	Position = float4(vPos, 0, 1);
+	TexCoord.x = 0.5f + vPos.x * 0.5f;
+	TexCoord.y = 0.5f - vPos.y * 0.5f;
+	if (!forward)
+	{
+		TexCoord = 1 - TexCoord;
+	}
+}
+
+void Buf2TexPS(float2 TexCoord : TEXCOORD0,
+		out float4 oReal : SV_Target0,
+		out float4 oImag : SV_Target1)
+{
+	uint index_x = (uint)(TexCoord.x * tex_width_height.x);
+	uint index_y = (uint)(TexCoord.y * tex_width_height.y);
+	uint in_index = index_y * tex_width_height.x + index_x;
+	
+	float2 c0 = input_buf[in_index + addr_offset.x];
+	float2 c1 = input_buf[in_index + addr_offset.y];
+	float2 c2 = input_buf[in_index + addr_offset.z];
+
+	oReal = float4(c0.x, c1.x, c2.x, 1);
+	oImag = float4(c0.y, c1.y, c2.y, 1);
+}
+		]]>
+	</shader>
+
+	<technique name="Buf2Tex">
+		<pass name="p0">
+			<state name="cull_mode" value="none"/>
+
+			<state name="vertex_shader" value="QuadVS()"/>
+			<state name="pixel_shader" value="Buf2TexPS()"/>
+		</pass>
+	</technique>
+
+
+	<cbuffer name="per_frame">
+		<parameter type="uint" name="thread_count"/>
+		<parameter type="uint" name="ostride"/>
+		<parameter type="uint" name="istride"/>
+		<parameter type="uint2" name="istride3"/>
+		<parameter type="uint" name="pstride"/>
+		<parameter type="float" name="phase_base"/>
+	</cbuffer>
+
+	<parameter type="structured_buffer" elem_type="float2" name="src_data"/>
+	<parameter type="rw_structured_buffer" elem_type="float2" name="dst_data"/>
+
+	<shader type="compute_shader" version="4">
+		<![CDATA[
+void FT2(inout float2 a, inout float2 b)
+{
+	float2 t = a;
+	a += b;
+	b = t - b;
+}
+
+void CMUL_forward(inout float2 a, float bx, float by)
+{
+	float t = a.x;
+	a.x = t * bx - a.y * by;
+	a.y = t * by + a.y * bx;
+}
+
+void UPD_forward(inout float2 a, inout float2 b)
+{
+	float A = a.x;
+	float B = b.y;
+
+	a.x += b.y;
+	b.y = a.y + b.x;
+	a.y -= b.x;
+	b.x = A - B;
+}
+
+void FFT_forward_4(inout float2 D[8])
+{
+	FT2(D[0], D[2]);
+	FT2(D[1], D[3]);
+	FT2(D[0], D[1]);
+
+	UPD_forward(D[2], D[3]);
+}
+
+void FFT_forward_8(inout float2 D[8])
+{
+	FT2(D[0], D[4]);
+	FT2(D[1], D[5]);
+	FT2(D[2], D[6]);
+	FT2(D[3], D[7]);
+
+	UPD_forward(D[4], D[6]);
+	UPD_forward(D[5], D[7]);
+
+	CMUL_forward(D[5], COS_PI_4_16, -COS_PI_4_16);
+	CMUL_forward(D[7], -COS_PI_4_16, -COS_PI_4_16);
+
+	FFT_forward_4(D);
+	FT2(D[4], D[5]);
+	FT2(D[6], D[7]);
+}
+
+void TWIDDLE(inout float2 d, float phase)
+{
+	float tx, ty;
+
+	sincos(phase, ty, tx);
+	float t = d.x;
+	d.x = t * tx - d.y * ty;
+	d.y = t * ty + d.y * tx;
+}
+
+void TWIDDLE_8(inout float2 D[8], float phase)
+{
+	TWIDDLE(D[4], 1 * phase);
+	TWIDDLE(D[2], 2 * phase);
+	TWIDDLE(D[6], 3 * phase);
+	TWIDDLE(D[1], 4 * phase);
+	TWIDDLE(D[5], 5 * phase);
+	TWIDDLE(D[3], 6 * phase);
+	TWIDDLE(D[7], 7 * phase);
+}
+
+
+[numthreads(COHERENCY_GRANULARITY, 1, 1)]
+void Radix008ACS4(uint3 thread_id : SV_DispatchThreadID)
+{
+	if (thread_id.x < thread_count)
+	{
+		// Fetch 8 complex numbers
+		float2 D[8];
+
+		uint imod = thread_id.x & (istride - 1);
+		uint iaddr = ((thread_id.x - imod) << 3) + imod;
+		for (uint i = 0; i < 8; i++)
+		{
+			D[i] = src_data[iaddr + i * istride];
+		}
+
+		// Math
+		FFT_forward_8(D);
+		uint p = thread_id.x & (istride - pstride);
+		float phase = phase_base * p;
+		TWIDDLE_8(D, phase);
+
+		// Store the result
+		uint omod = thread_id.x & (ostride - 1);
+		uint oaddr = ((thread_id.x - omod) << 3) + omod;
+		dst_data[oaddr + 0 * ostride] = D[0];
+		dst_data[oaddr + 1 * ostride] = D[4];
+		dst_data[oaddr + 2 * ostride] = D[2];
+		dst_data[oaddr + 3 * ostride] = D[6];
+		dst_data[oaddr + 4 * ostride] = D[1];
+		dst_data[oaddr + 5 * ostride] = D[5];
+		dst_data[oaddr + 6 * ostride] = D[3];
+		dst_data[oaddr + 7 * ostride] = D[7];
+	}
+}
+
+[numthreads(COHERENCY_GRANULARITY, 1, 1)]
+void Radix008AFirstCS4(uint3 thread_id : SV_DispatchThreadID)
+{
+	if (thread_id.x < thread_count)
+	{
+		// Fetch 8 complex numbers
+		float2 D[8];
+
+		uint imod = thread_id.x & (istride - 1);
+		uint iaddr = ((thread_id.x - imod) << 3) + imod;
+		uint comp = iaddr / addr_offset.y;
+		uint index = iaddr - comp * addr_offset.y;
+		uint index_y = index / tex_width_height.x;
+		uint index_x = index - index_y * tex_width_height.x;
+		for (uint i = 0; i < 8; i++)
+		{
+			uint3 index_xy = uint3(uint2(index_x, index_y) + i * istride3, 0);
+			D[i] = float2(real_tex.Load(index_xy)[comp], imag_tex.Load(index_xy)[comp]);
+		}
+
+		// Math
+		FFT_forward_8(D);
+		uint p = thread_id.x & (istride - pstride);
+		float phase = phase_base * p;
+		TWIDDLE_8(D, phase);
+
+		// Store the result
+		uint omod = thread_id.x & (ostride - 1);
+		uint oaddr = ((thread_id.x - omod) << 3) + omod;
+		dst_data[oaddr + 0 * ostride] = D[0];
+		dst_data[oaddr + 1 * ostride] = D[4];
+		dst_data[oaddr + 2 * ostride] = D[2];
+		dst_data[oaddr + 3 * ostride] = D[6];
+		dst_data[oaddr + 4 * ostride] = D[1];
+		dst_data[oaddr + 5 * ostride] = D[5];
+		dst_data[oaddr + 6 * ostride] = D[3];
+		dst_data[oaddr + 7 * ostride] = D[7];
+	}
+}
+
+[numthreads(COHERENCY_GRANULARITY, 1, 1)]
+void Radix008AFinalCS4(uint3 thread_id : SV_DispatchThreadID)
+{
+	if (thread_id.x < thread_count)
+	{
+		// Fetch 8 complex numbers
+		float2 D[8];
+		uint iaddr = thread_id.x << 3;
+		for (uint i = 0; i < 8; i++)
+		{
+			D[i] = src_data[iaddr + i];
+		}
+
+		// Math
+		FFT_forward_8(D);
+		
+		if (!forward)
+		{
+			for (uint i = 0; i < 8; i++)
+			{
+				D[i] *= scale;
+			}
+		}
+
+		// Store the result
+		uint omod = thread_id.x & (ostride - 1);
+		uint oaddr = ((thread_id.x - omod) << 3) + omod;
+		dst_data[oaddr + 0 * ostride] = D[0];
+		dst_data[oaddr + 1 * ostride] = D[4];
+		dst_data[oaddr + 2 * ostride] = D[2];
+		dst_data[oaddr + 3 * ostride] = D[6];
+		dst_data[oaddr + 4 * ostride] = D[1];
+		dst_data[oaddr + 5 * ostride] = D[5];
+		dst_data[oaddr + 6 * ostride] = D[3];
+		dst_data[oaddr + 7 * ostride] = D[7];
+	}
+}
+		]]>
+	</shader>
+
+	<technique name="FFTRadix008A4">
+		<pass name="p0">
+			<state name="compute_shader" value="Radix008ACS4()"/>
+		</pass>
+	</technique>
+
+	<technique name="FFTRadix008AFirst4">
+		<pass name="p0">
+			<state name="compute_shader" value="Radix008AFirstCS4()"/>
+		</pass>
+	</technique>
+
+	<technique name="FFTRadix008AFinal4">
+		<pass name="p0">
+			<state name="compute_shader" value="Radix008AFinalCS4()"/>
+		</pass>
+	</technique>
+
+	
+	<cbuffer name="per_frame2">
+		<parameter type="uint4" name="istride2"/>
+		<parameter type="uint2" name="ostride2"/>
+		<parameter type="uint2" name="iscale2"/>
+		<parameter type="float" name="phase_base2"/>
+	</cbuffer>
+
+	<parameter type="texture2D" elem_type="float4" name="src_real_tex"/>
+	<parameter type="texture2D" elem_type="float4" name="src_imag_tex"/>
+	<parameter type="rw_texture2D" elem_type="float4" name="dst_real_tex"/>
+	<parameter type="rw_texture2D" elem_type="float4" name="dst_imag_tex"/>
+
+	<shader type="compute_shader" version="5">
+		<![CDATA[
+[numthreads(BLOCK_SIZE_X, BLOCK_SIZE_Y, 1)]
+void Radix008ACS5(uint3 thread_id : SV_DispatchThreadID)
+{
+	// Fetch 8 complex numbers
+	float2 D[3][8];
+
+	uint2 imod = thread_id.xy & istride2.zw;
+	uint2 xy = (thread_id.xy - imod) * iscale2 + imod;
+	for (uint i = 0; i < 8; ++ i)
+	{
+		float3 real = src_real_tex[xy + i * istride2.xy].xyz;
+		float3 imag = src_imag_tex[xy + i * istride2.xy].xyz;
+		D[0][i].x = real.x;
+		D[1][i].x = real.y;
+		D[2][i].x = real.z;
+		D[0][i].y = imag.x;
+		D[1][i].y = imag.y;
+		D[2][i].y = imag.z;
+	}
+
+	for (int ch = 0; ch < 3; ++ ch)
+	{
+		// Math
+		FFT_forward_8(D[ch]);
+		uint p = (0 == istride2.x) ? (thread_id.y & istride2.w) : (thread_id.x & istride2.z);
+		float phase = phase_base2 * p;
+		TWIDDLE_8(D[ch], phase);
+	}
+
+	// Store the result
+	dst_real_tex[thread_id.xy + 0 * ostride2] = float4(D[0][0].x, D[1][0].x, D[2][0].x, 0);
+	dst_real_tex[thread_id.xy + 1 * ostride2] = float4(D[0][4].x, D[1][4].x, D[2][4].x, 0);
+	dst_real_tex[thread_id.xy + 2 * ostride2] = float4(D[0][2].x, D[1][2].x, D[2][2].x, 0);
+	dst_real_tex[thread_id.xy + 3 * ostride2] = float4(D[0][6].x, D[1][6].x, D[2][6].x, 0);
+	dst_real_tex[thread_id.xy + 4 * ostride2] = float4(D[0][1].x, D[1][1].x, D[2][1].x, 0);
+	dst_real_tex[thread_id.xy + 5 * ostride2] = float4(D[0][5].x, D[1][5].x, D[2][5].x, 0);
+	dst_real_tex[thread_id.xy + 6 * ostride2] = float4(D[0][3].x, D[1][3].x, D[2][3].x, 0);
+	dst_real_tex[thread_id.xy + 7 * ostride2] = float4(D[0][7].x, D[1][7].x, D[2][7].x, 0);
+
+	dst_imag_tex[thread_id.xy + 0 * ostride2] = float4(D[0][0].y, D[1][0].y, D[2][0].y, 0);
+	dst_imag_tex[thread_id.xy + 1 * ostride2] = float4(D[0][4].y, D[1][4].y, D[2][4].y, 0);
+	dst_imag_tex[thread_id.xy + 2 * ostride2] = float4(D[0][2].y, D[1][2].y, D[2][2].y, 0);
+	dst_imag_tex[thread_id.xy + 3 * ostride2] = float4(D[0][6].y, D[1][6].y, D[2][6].y, 0);
+	dst_imag_tex[thread_id.xy + 4 * ostride2] = float4(D[0][1].y, D[1][1].y, D[2][1].y, 0);
+	dst_imag_tex[thread_id.xy + 5 * ostride2] = float4(D[0][5].y, D[1][5].y, D[2][5].y, 0);
+	dst_imag_tex[thread_id.xy + 6 * ostride2] = float4(D[0][3].y, D[1][3].y, D[2][3].y, 0);
+	dst_imag_tex[thread_id.xy + 7 * ostride2] = float4(D[0][7].y, D[1][7].y, D[2][7].y, 0);
+}
+
+[numthreads(BLOCK_SIZE_X, BLOCK_SIZE_Y, 1)]
+void Radix008AFinalXCS5(uint3 thread_id : SV_DispatchThreadID)
+{
+	// Fetch 8 complex numbers
+	float2 D[3][8];
+	
+	uint2 xy = thread_id.xy * iscale2;
+	for (uint i = 0; i < 8; ++ i)
+	{
+		float3 real = src_real_tex[xy + i * istride2.xy].xyz;
+		float3 imag = src_imag_tex[xy + i * istride2.xy].xyz;
+		D[0][i].x = real.x;
+		D[1][i].x = real.y;
+		D[2][i].x = real.z;
+		D[0][i].y = imag.x;
+		D[1][i].y = imag.y;
+		D[2][i].y = imag.z;
+	}
+
+	for (int ch = 0; ch < 3; ++ ch)
+	{
+		// Math
+		FFT_forward_8(D[ch]);
+	}
+		
+	// Store the result
+	dst_real_tex[thread_id.xy + 0 * ostride2] = float4(D[0][0].x, D[1][0].x, D[2][0].x, 0);
+	dst_real_tex[thread_id.xy + 1 * ostride2] = float4(D[0][4].x, D[1][4].x, D[2][4].x, 0);
+	dst_real_tex[thread_id.xy + 2 * ostride2] = float4(D[0][2].x, D[1][2].x, D[2][2].x, 0);
+	dst_real_tex[thread_id.xy + 3 * ostride2] = float4(D[0][6].x, D[1][6].x, D[2][6].x, 0);
+	dst_real_tex[thread_id.xy + 4 * ostride2] = float4(D[0][1].x, D[1][1].x, D[2][1].x, 0);
+	dst_real_tex[thread_id.xy + 5 * ostride2] = float4(D[0][5].x, D[1][5].x, D[2][5].x, 0);
+	dst_real_tex[thread_id.xy + 6 * ostride2] = float4(D[0][3].x, D[1][3].x, D[2][3].x, 0);
+	dst_real_tex[thread_id.xy + 7 * ostride2] = float4(D[0][7].x, D[1][7].x, D[2][7].x, 0);
+
+	dst_imag_tex[thread_id.xy + 0 * ostride2] = float4(D[0][0].y, D[1][0].y, D[2][0].y, 0);
+	dst_imag_tex[thread_id.xy + 1 * ostride2] = float4(D[0][4].y, D[1][4].y, D[2][4].y, 0);
+	dst_imag_tex[thread_id.xy + 2 * ostride2] = float4(D[0][2].y, D[1][2].y, D[2][2].y, 0);
+	dst_imag_tex[thread_id.xy + 3 * ostride2] = float4(D[0][6].y, D[1][6].y, D[2][6].y, 0);
+	dst_imag_tex[thread_id.xy + 4 * ostride2] = float4(D[0][1].y, D[1][1].y, D[2][1].y, 0);
+	dst_imag_tex[thread_id.xy + 5 * ostride2] = float4(D[0][5].y, D[1][5].y, D[2][5].y, 0);
+	dst_imag_tex[thread_id.xy + 6 * ostride2] = float4(D[0][3].y, D[1][3].y, D[2][3].y, 0);
+	dst_imag_tex[thread_id.xy + 7 * ostride2] = float4(D[0][7].y, D[1][7].y, D[2][7].y, 0);
+}
+
+[numthreads(BLOCK_SIZE_X, BLOCK_SIZE_Y, 1)]
+void Radix008AFinalYCS5(uint3 thread_id : SV_DispatchThreadID)
+{
+	// Fetch 8 complex numbers
+	float2 D[3][8];
+	
+	uint2 xy = thread_id.xy * iscale2;
+	for (uint i = 0; i < 8; ++ i)
+	{
+		float3 real = src_real_tex[xy + i * istride2.xy].xyz;
+		float3 imag = src_imag_tex[xy + i * istride2.xy].xyz;
+		D[0][i].x = real.x;
+		D[1][i].x = real.y;
+		D[2][i].x = real.z;
+		D[0][i].y = imag.x;
+		D[1][i].y = imag.y;
+		D[2][i].y = imag.z;
+	}
+
+	for (int ch = 0; ch < 3; ++ ch)
+	{
+		// Math
+		FFT_forward_8(D[ch]);
+		
+		for (uint i = 0; i < 8; ++ i)
+		{
+			D[ch][i] *= scale;
+		}
+	}
+
+	// Store the result
+	dst_real_tex[tex_width_height - (thread_id.xy + 0 * ostride2)] = float4(D[0][0].x, D[1][0].x, D[2][0].x, 0);
+	dst_real_tex[tex_width_height - (thread_id.xy + 1 * ostride2)] = float4(D[0][4].x, D[1][4].x, D[2][4].x, 0);
+	dst_real_tex[tex_width_height - (thread_id.xy + 2 * ostride2)] = float4(D[0][2].x, D[1][2].x, D[2][2].x, 0);
+	dst_real_tex[tex_width_height - (thread_id.xy + 3 * ostride2)] = float4(D[0][6].x, D[1][6].x, D[2][6].x, 0);
+	dst_real_tex[tex_width_height - (thread_id.xy + 4 * ostride2)] = float4(D[0][1].x, D[1][1].x, D[2][1].x, 0);
+	dst_real_tex[tex_width_height - (thread_id.xy + 5 * ostride2)] = float4(D[0][5].x, D[1][5].x, D[2][5].x, 0);
+	dst_real_tex[tex_width_height - (thread_id.xy + 6 * ostride2)] = float4(D[0][3].x, D[1][3].x, D[2][3].x, 0);
+	dst_real_tex[tex_width_height - (thread_id.xy + 7 * ostride2)] = float4(D[0][7].x, D[1][7].x, D[2][7].x, 0);
+
+	dst_imag_tex[tex_width_height - (thread_id.xy + 0 * ostride2)] = float4(D[0][0].y, D[1][0].y, D[2][0].y, 0);
+	dst_imag_tex[tex_width_height - (thread_id.xy + 1 * ostride2)] = float4(D[0][4].y, D[1][4].y, D[2][4].y, 0);
+	dst_imag_tex[tex_width_height - (thread_id.xy + 2 * ostride2)] = float4(D[0][2].y, D[1][2].y, D[2][2].y, 0);
+	dst_imag_tex[tex_width_height - (thread_id.xy + 3 * ostride2)] = float4(D[0][6].y, D[1][6].y, D[2][6].y, 0);
+	dst_imag_tex[tex_width_height - (thread_id.xy + 4 * ostride2)] = float4(D[0][1].y, D[1][1].y, D[2][1].y, 0);
+	dst_imag_tex[tex_width_height - (thread_id.xy + 5 * ostride2)] = float4(D[0][5].y, D[1][5].y, D[2][5].y, 0);
+	dst_imag_tex[tex_width_height - (thread_id.xy + 6 * ostride2)] = float4(D[0][3].y, D[1][3].y, D[2][3].y, 0);
+	dst_imag_tex[tex_width_height - (thread_id.xy + 7 * ostride2)] = float4(D[0][7].y, D[1][7].y, D[2][7].y, 0);
+}
+		]]>
+	</shader>
+
+	<technique name="FFTRadix008A5">
+		<pass name="p0">
+			<state name="compute_shader" value="Radix008ACS5()"/>
+		</pass>
+	</technique>
+
+	<technique name="FFTRadix008AFinalX5">
+		<pass name="p0">
+			<state name="compute_shader" value="Radix008AFinalXCS5()"/>
+		</pass>
+	</technique>
+
+	<technique name="FFTRadix008AFinalY5">
+		<pass name="p0">
+			<state name="compute_shader" value="Radix008AFinalYCS5()"/>
+		</pass>
+	</technique>
+</effect>

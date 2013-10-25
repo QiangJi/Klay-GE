@@ -1,0 +1,79 @@
+<?xml version='1.0'?>
+
+<effect>
+	<cbuffer name="per_frame">
+		<parameter type="float4x4" name="view"/>
+		<parameter type="float4x4" name="proj"/>
+
+		<parameter type="float3" name="depth_near_far_invfar"/>
+	</cbuffer>
+	
+	<parameter type="float3" name="LightPos" x="0" y="10" z="3"/>
+	<parameter type="texture2D" name="grass_tex"/>
+	<parameter type="texture2D" name="logo_tex">
+		<annotation type="string" name="SasResourceAddress" value="klayge_logo_sm.dds"/>
+	</parameter>
+	<parameter type="sampler" name="grass_sampler">
+		<state name="filtering" value="anisotropic"/>
+		<state name="address_u" value="wrap"/>
+		<state name="address_v" value="wrap"/>
+		<state name="max_anisotropy" value="8"/>
+	</parameter>
+
+	<shader>
+		<![CDATA[
+void TerrainDepthVS(float4 Position : POSITION,
+					out float oDepth : TEXCOORD0,
+					out float4 oPos : SV_Position)
+{
+	oPos = mul(mul(Position, view), proj);
+	oDepth = oPos.w;
+}
+
+float4 TerrainDepthPS(float depth : TEXCOORD0) : SV_Target 
+{
+	return depth;
+}
+
+void TerrainVS(float4 Position : POSITION,
+					out float4 oTex0 : TEXCOORD0,
+					out float3 oPosOS : TEXCOORD1,
+					out float3 oNormal : TEXCOORD2,
+					out float2 oDepth : TEXCOORD3,
+					out float4 oPos : SV_Position)
+{
+	float4 pos_es = mul(Position, view);
+	oPos = mul(pos_es, proj);
+	oNormal = float3(0, 1, 0);
+	oPosOS = Position.xyz;
+	oDepth = pos_es.zw;
+	oTex0 = Position.xzxz * float4(1, 1, 0.5, -0.8f);
+}
+
+float4 TerrainPS(float4 tex0 : TEXCOORD0,
+					float3 pos_os : TEXCOORD1,
+					float3 normal : TEXCOORD2,
+					float2 depth : TEXCOORD3) : SV_Target 
+{
+	float4 logo = logo_tex.Sample(grass_sampler, tex0.zw);
+	float4 clr = float4(grass_tex.Sample(grass_sampler, tex0.xy).rgb * dot(normalize(LightPos - pos_os), normal),
+				depth.x / depth.y * depth_near_far_invfar.z);
+	return float4(lerp(clr.rgb, logo.rgb, 0.3f), 1);
+}
+		]]>
+	</shader>
+
+	<technique name="TerrainDepth">
+		<pass name="p0">
+			<state name="vertex_shader" value="TerrainDepthVS()"/>
+			<state name="pixel_shader" value="TerrainDepthPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="Terrain">
+		<pass name="p0">
+			<state name="vertex_shader" value="TerrainVS()"/>
+			<state name="pixel_shader" value="TerrainPS()"/>
+		</pass>
+	</technique>
+</effect>

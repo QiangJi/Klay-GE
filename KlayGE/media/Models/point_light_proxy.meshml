@@ -1,0 +1,690 @@
+<?xml version="1.0"?>
+
+<model version="6">
+	<materials_chunk>
+		<material ambient="0 0 0" diffuse="0 0 0" specular="0 0 0" emit="1 1 1" opacity="1" specular_level="0" shininess="1"/>
+	</materials_chunk>
+	<meshes_chunk>
+		<mesh name="GeoSphere01" mtl_id="0">
+			<vertices_chunk>
+				<pos_bb min="-0.985456 -1 -0.983023" max="0.985456 1 0.983024"/>
+				<tc_bb min="-0.2 0" max="0.965623 1"/>
+
+				<vertex v="0 1 0">
+					<tangent_quat v="-0.637315 -0.306309 -0.306309 0.637315"/>
+					<tex_coord v="0.4 0"/>
+				</vertex>
+				<vertex v="0 1 0">
+					<tangent_quat v="-0.637315 -0.306309 -0.306309 0.637315"/>
+					<tex_coord v="0.6 0"/>
+				</vertex>
+				<vertex v="0 1 0">
+					<tangent_quat v="-0.637315 -0.306309 -0.306309 0.637315"/>
+					<tex_coord v="0.8 0"/>
+				</vertex>
+				<vertex v="0 1 0">
+					<tangent_quat v="-0.637315 -0.306309 -0.306309 0.637315"/>
+					<tex_coord v="3.72529e-008 0"/>
+				</vertex>
+				<vertex v="0 1 0">
+					<tangent_quat v="-0.637315 -0.306309 -0.306309 0.637315"/>
+					<tex_coord v="0.2 0"/>
+				</vertex>
+				<vertex v="0.894427 0.447214 0">
+					<tangent_quat v="-0.688188 -0.162459 -0.688188 0.162459"/>
+					<tex_coord v="0.5 0.352416"/>
+				</vertex>
+				<vertex v="0.276393 0.447214 0.850651">
+					<tangent_quat v="-0.152249 -0.226923 -0.961263 0.0359411"/>
+					<tex_coord v="0.7 0.352416"/>
+				</vertex>
+				<vertex v="-0.723607 0.447214 0.525731">
+					<tangent_quat v="-0.441844 0.20471 0.867167 0.104305"/>
+					<tex_coord v="0.9 0.352416"/>
+				</vertex>
+				<vertex v="-0.723607 0.447214 -0.525731">
+					<tangent_quat v="-0.867167 0.104305 0.441844 0.20471"/>
+					<tex_coord v="0.1 0.352416"/>
+				</vertex>
+				<vertex v="0.276393 0.447214 -0.850651">
+					<tangent_quat v="-0.961263 -0.0359411 -0.152249 0.226923"/>
+					<tex_coord v="0.3 0.352416"/>
+				</vertex>
+				<vertex v="0.723607 -0.447214 0.525731">
+					<tangent_quat v="0.441844 -0.20471 0.867168 0.104305"/>
+					<tex_coord v="0.6 0.647584"/>
+				</vertex>
+				<vertex v="-0.276393 -0.447214 0.850651">
+					<tangent_quat v="0.152249 0.226923 -0.961263 0.0359412"/>
+					<tex_coord v="0.8 0.647584"/>
+				</vertex>
+				<vertex v="-0.894427 -0.447214 -7.81933e-008">
+					<tangent_quat v="0.688188 0.162459 -0.688188 0.162459"/>
+					<tex_coord v="3.79455e-008 0.647584"/>
+				</vertex>
+				<vertex v="-0.276393 -0.447214 -0.850651">
+					<tangent_quat v="0.961263 0.0359411 -0.152249 0.226923"/>
+					<tex_coord v="0.2 0.647584"/>
+				</vertex>
+				<vertex v="0.723607 -0.447214 -0.525731">
+					<tangent_quat v="0.867167 -0.104305 0.441844 0.204711"/>
+					<tex_coord v="0.4 0.647584"/>
+				</vertex>
+				<vertex v="0 -1 0">
+					<tangent_quat v="-0.501208 -0.498785 0.498785 -0.501208"/>
+					<tex_coord v="0.5 1"/>
+				</vertex>
+				<vertex v="0 -1 0">
+					<tangent_quat v="-0.501208 -0.498785 0.498785 -0.501208"/>
+					<tex_coord v="0.7 1"/>
+				</vertex>
+				<vertex v="0 -1 0">
+					<tangent_quat v="-0.501208 -0.498785 0.498785 -0.501208"/>
+					<tex_coord v="-0.1 1"/>
+				</vertex>
+				<vertex v="0 -1 0">
+					<tangent_quat v="-0.501208 -0.498785 0.498785 -0.501208"/>
+					<tex_coord v="0.1 1"/>
+				</vertex>
+				<vertex v="0 -1 0">
+					<tangent_quat v="-0.501208 -0.498785 0.498785 -0.501208"/>
+					<tex_coord v="0.3 1"/>
+				</vertex>
+				<vertex v="0.360729 0.932671 0">
+					<tangent_quat v="-0.580661 -0.403519 -0.580661 0.403519"/>
+					<tex_coord v="0.5 0.117472"/>
+				</vertex>
+				<vertex v="0.672883 0.739749 0">
+					<tangent_quat v="-0.647777 -0.283515 -0.647777 0.283515"/>
+					<tex_coord v="0.5 0.234944"/>
+				</vertex>
+				<vertex v="0.111471 0.932671 0.343074">
+					<tangent_quat v="-0.128461 -0.563637 -0.811069 0.0892713"/>
+					<tex_coord v="0.7 0.117472"/>
+				</vertex>
+				<vertex v="0.207932 0.739749 0.63995">
+					<tangent_quat v="-0.143309 -0.396014 -0.904816 0.0627225"/>
+					<tex_coord v="0.7 0.234944"/>
+				</vertex>
+				<vertex v="-0.291836 0.932671 0.212031">
+					<tangent_quat v="-0.372808 0.508464 0.731676 0.259075"/>
+					<tex_coord v="0.9 0.117472"/>
+				</vertex>
+				<vertex v="-0.291836 0.932671 0.212031">
+					<tangent_quat v="-0.372808 0.508464 0.731676 0.259075"/>
+					<tex_coord v="-0.1 0.117472"/>
+				</vertex>
+				<vertex v="-0.291836 0.932671 0.212031">
+					<tangent_quat v="-0.372808 0.508464 0.731676 0.259075"/>
+					<tex_coord v="-0.1 0.117472"/>
+				</vertex>
+				<vertex v="-0.291836 0.932671 0.212031">
+					<tangent_quat v="-0.372808 0.508464 0.731676 0.259075"/>
+					<tex_coord v="-0.1 0.117472"/>
+				</vertex>
+				<vertex v="-0.544374 0.739749 0.395511">
+					<tangent_quat v="-0.415898 0.35725 0.816247 0.182028"/>
+					<tex_coord v="0.9 0.234944"/>
+				</vertex>
+				<vertex v="-0.544374 0.739749 0.395511">
+					<tangent_quat v="-0.415898 0.35725 0.816247 0.182028"/>
+					<tex_coord v="-0.1 0.234944"/>
+				</vertex>
+				<vertex v="-0.544374 0.739749 0.395511">
+					<tangent_quat v="-0.415898 0.35725 0.816247 0.182028"/>
+					<tex_coord v="-0.1 0.234944"/>
+				</vertex>
+				<vertex v="-0.291836 0.932671 -0.212031">
+					<tangent_quat v="-0.731676 0.259075 0.372808 0.508464"/>
+					<tex_coord v="0.1 0.117472"/>
+				</vertex>
+				<vertex v="-0.544374 0.739749 -0.395511">
+					<tangent_quat v="-0.816247 0.182028 0.415898 0.35725"/>
+					<tex_coord v="0.1 0.234944"/>
+				</vertex>
+				<vertex v="0.111471 0.932671 -0.343074">
+					<tangent_quat v="-0.811069 -0.0892714 -0.128461 0.563637"/>
+					<tex_coord v="0.3 0.117472"/>
+				</vertex>
+				<vertex v="0.207932 0.739749 -0.63995">
+					<tangent_quat v="-0.904816 -0.0627226 -0.143309 0.396014"/>
+					<tex_coord v="0.3 0.234944"/>
+				</vertex>
+				<vertex v="0.784354 0.516806 0.343074">
+					<tangent_quat v="-0.529449 -0.222651 -0.80487 0.149286"/>
+					<tex_coord v="0.565623 0.327121"/>
+				</vertex>
+				<vertex v="0.568661 0.516806 0.63995">
+					<tangent_quat v="-0.339951 -0.251646 -0.901424 0.0923802"/>
+					<tex_coord v="0.634377 0.327121"/>
+				</vertex>
+				<vertex v="-0.0839038 0.516806 0.851981">
+					<tangent_quat v="-0.0447578 0.267876 0.962356 0.010096"/>
+					<tex_coord v="0.765623 0.327121"/>
+				</vertex>
+				<vertex v="-0.432902 0.516806 0.738584">
+					<tangent_quat v="-0.254817 0.257885 0.929085 0.0731763"/>
+					<tex_coord v="0.834377 0.327121"/>
+				</vertex>
+				<vertex v="-0.83621 0.516806 0.183479">
+					<tangent_quat v="-0.601868 0.210782 0.752254 0.165622"/>
+					<tex_coord v="0.965623 0.327121"/>
+				</vertex>
+				<vertex v="-0.83621 0.516806 0.183479">
+					<tangent_quat v="-0.601868 0.210782 0.752254 0.165622"/>
+					<tex_coord v="-0.0343767 0.327121"/>
+				</vertex>
+				<vertex v="-0.83621 0.516806 0.183479">
+					<tangent_quat v="-0.601868 0.210782 0.752254 0.165622"/>
+					<tex_coord v="-0.0343767 0.327121"/>
+				</vertex>
+				<vertex v="-0.83621 0.516806 0.183479">
+					<tangent_quat v="-0.601868 0.210782 0.752254 0.165622"/>
+					<tex_coord v="-0.0343767 0.327121"/>
+				</vertex>
+				<vertex v="-0.83621 0.516806 0.183479">
+					<tangent_quat v="-0.601868 0.210782 0.752254 0.165622"/>
+					<tex_coord v="-0.0343767 0.327121"/>
+				</vertex>
+				<vertex v="-0.83621 0.516806 -0.183479">
+					<tangent_quat v="-0.752254 0.165622 0.601868 0.210782"/>
+					<tex_coord v="0.0343767 0.327121"/>
+				</vertex>
+				<vertex v="-0.432902 0.516806 -0.738584">
+					<tangent_quat v="-0.929086 0.0731765 0.254817 0.257885"/>
+					<tex_coord v="0.165623 0.327121"/>
+				</vertex>
+				<vertex v="-0.0839036 0.516806 -0.851981">
+					<tangent_quat v="-0.962356 0.010096 0.0447577 0.267876"/>
+					<tex_coord v="0.234377 0.327121"/>
+				</vertex>
+				<vertex v="0.568661 0.516806 -0.63995">
+					<tangent_quat v="-0.901424 -0.0923803 -0.339951 0.251646"/>
+					<tex_coord v="0.365623 0.327121"/>
+				</vertex>
+				<vertex v="0.784354 0.516806 -0.343074">
+					<tangent_quat v="-0.80487 -0.149286 -0.529449 0.222651"/>
+					<tex_coord v="0.434377 0.327121"/>
+				</vertex>
+				<vertex v="0.964719 0.156077 0.212031">
+					<tangent_quat v="-0.624893 -0.0646272 -0.776175 0.0536246"/>
+					<tex_coord v="0.534432 0.450115"/>
+				</vertex>
+				<vertex v="0.905103 -0.156077 0.395511">
+					<tangent_quat v="0.545084 -0.0709709 0.83416 0.0448931"/>
+					<tex_coord v="0.565567 0.549885"/>
+				</vertex>
+				<vertex v="0.0964608 0.156077 0.983023">
+					<tangent_quat v="-0.049323 -0.0838016 -0.995211 0.00787402"/>
+					<tex_coord v="0.734432 0.450115"/>
+				</vertex>
+				<vertex v="-0.0964609 -0.156077 0.983024">
+					<tangent_quat v="0.0493232 0.0838016 -0.995211 0.00787402"/>
+					<tex_coord v="0.765567 0.549885"/>
+				</vertex>
+				<vertex v="-0.905103 0.156077 0.395511">
+					<tangent_quat v="-0.545084 0.0709709 0.83416 0.0448932"/>
+					<tex_coord v="0.934433 0.450115"/>
+				</vertex>
+				<vertex v="-0.905103 0.156077 0.395511">
+					<tangent_quat v="-0.545084 0.0709709 0.83416 0.0448932"/>
+					<tex_coord v="-0.0655674 0.450115"/>
+				</vertex>
+				<vertex v="-0.905103 0.156077 0.395511">
+					<tangent_quat v="-0.545084 0.0709709 0.83416 0.0448932"/>
+					<tex_coord v="-0.0655674 0.450115"/>
+				</vertex>
+				<vertex v="-0.964719 -0.156077 0.212031">
+					<tangent_quat v="0.624893 0.0646272 -0.776175 0.0536246"/>
+					<tex_coord v="0.965568 0.549885"/>
+				</vertex>
+				<vertex v="-0.964719 -0.156077 0.212031">
+					<tangent_quat v="0.624893 0.0646272 -0.776175 0.0536246"/>
+					<tex_coord v="-0.0344325 0.549885"/>
+				</vertex>
+				<vertex v="-0.964719 -0.156077 0.212031">
+					<tangent_quat v="0.624893 0.0646272 -0.776175 0.0536246"/>
+					<tex_coord v="-0.0344325 0.549885"/>
+				</vertex>
+				<vertex v="-0.964719 -0.156077 0.212031">
+					<tangent_quat v="0.624893 0.0646272 -0.776175 0.0536246"/>
+					<tex_coord v="-0.0344325 0.549885"/>
+				</vertex>
+				<vertex v="-0.964719 -0.156077 0.212031">
+					<tangent_quat v="0.624893 0.0646272 -0.776175 0.0536246"/>
+					<tex_coord v="-0.0344325 0.549885"/>
+				</vertex>
+				<vertex v="-0.655845 0.156077 -0.738585">
+					<tangent_quat v="-0.931289 0.0310292 0.354457 0.078035"/>
+					<tex_coord v="0.134432 0.450115"/>
+				</vertex>
+				<vertex v="-0.499768 -0.156077 -0.851981">
+					<tangent_quat v="0.961773 0.0207647 -0.260636 0.08137"/>
+					<tex_coord v="0.165568 0.549885"/>
+				</vertex>
+				<vertex v="0.499768 0.156077 -0.851981">
+					<tangent_quat v="-0.961773 -0.0207647 -0.260636 0.08137"/>
+					<tex_coord v="0.334433 0.450115"/>
+				</vertex>
+				<vertex v="0.655845 -0.156077 -0.738584">
+					<tangent_quat v="0.931289 -0.0310291 0.354457 0.078035"/>
+					<tex_coord v="0.365568 0.549885"/>
+				</vertex>
+				<vertex v="0.964719 0.156077 -0.212031">
+					<tangent_quat v="-0.776175 -0.0536245 -0.624893 0.0646272"/>
+					<tex_coord v="0.465568 0.450115"/>
+				</vertex>
+				<vertex v="0.905103 -0.156077 -0.39551">
+					<tangent_quat v="0.83416 -0.0448932 0.545084 0.070971"/>
+					<tex_coord v="0.434433 0.549885"/>
+				</vertex>
+				<vertex v="0.499768 0.156077 0.851981">
+					<tangent_quat v="-0.260636 -0.0813701 -0.961773 0.0207647"/>
+					<tex_coord v="0.665568 0.450115"/>
+				</vertex>
+				<vertex v="0.655845 -0.156077 0.738584">
+					<tangent_quat v="0.354457 -0.0780349 0.931289 0.0310291"/>
+					<tex_coord v="0.634432 0.549885"/>
+				</vertex>
+				<vertex v="-0.655845 0.156077 0.738584">
+					<tangent_quat v="-0.354457 0.078035 0.931289 0.0310291"/>
+					<tex_coord v="0.865568 0.450115"/>
+				</vertex>
+				<vertex v="-0.499768 -0.156077 0.851981">
+					<tangent_quat v="0.260636 0.08137 -0.961773 0.0207647"/>
+					<tex_coord v="0.834432 0.549885"/>
+				</vertex>
+				<vertex v="-0.905103 0.156077 -0.395511">
+					<tangent_quat v="-0.83416 0.0448932 0.545084 0.070971"/>
+					<tex_coord v="0.0655675 0.450115"/>
+				</vertex>
+				<vertex v="-0.964719 -0.156077 -0.212031">
+					<tangent_quat v="0.776175 0.0536245 -0.624893 0.0646271"/>
+					<tex_coord v="0.0344325 0.549885"/>
+				</vertex>
+				<vertex v="0.0964609 0.156077 -0.983023">
+					<tangent_quat v="-0.995242 -0.00539634 -0.0493247 0.0838041"/>
+					<tex_coord v="0.265568 0.450115"/>
+				</vertex>
+				<vertex v="-0.0964608 -0.156077 -0.983023">
+					<tangent_quat v="0.995242 0.0053963 -0.0493245 0.0838041"/>
+					<tex_coord v="0.234433 0.549885"/>
+				</vertex>
+				<vertex v="0.432902 -0.516806 0.738584">
+					<tangent_quat v="0.254817 -0.257885 0.929085 0.0731765"/>
+					<tex_coord v="0.665623 0.672879"/>
+				</vertex>
+				<vertex v="0.0839037 -0.516806 0.851981">
+					<tangent_quat v="0.0447577 -0.267876 0.962356 0.010096"/>
+					<tex_coord v="0.734377 0.672879"/>
+				</vertex>
+				<vertex v="-0.568661 -0.516806 0.63995">
+					<tangent_quat v="0.339951 0.251646 -0.901424 0.0923802"/>
+					<tex_coord v="0.865623 0.672879"/>
+				</vertex>
+				<vertex v="-0.784354 -0.516806 0.343074">
+					<tangent_quat v="0.529449 0.222651 -0.80487 0.149286"/>
+					<tex_coord v="0.934377 0.672879"/>
+				</vertex>
+				<vertex v="-0.784354 -0.516806 0.343074">
+					<tangent_quat v="0.529449 0.222651 -0.80487 0.149286"/>
+					<tex_coord v="-0.0656233 0.672879"/>
+				</vertex>
+				<vertex v="-0.784354 -0.516806 0.343074">
+					<tangent_quat v="0.529449 0.222651 -0.80487 0.149286"/>
+					<tex_coord v="-0.0656233 0.672879"/>
+				</vertex>
+				<vertex v="-0.784354 -0.516806 0.343074">
+					<tangent_quat v="0.529449 0.222651 -0.80487 0.149286"/>
+					<tex_coord v="-0.0656233 0.672879"/>
+				</vertex>
+				<vertex v="-0.784354 -0.516806 -0.343074">
+					<tangent_quat v="0.80487 0.149286 -0.529449 0.222651"/>
+					<tex_coord v="0.0656234 0.672879"/>
+				</vertex>
+				<vertex v="-0.568661 -0.516806 -0.63995">
+					<tangent_quat v="0.901424 0.0923802 -0.339951 0.251646"/>
+					<tex_coord v="0.134377 0.672879"/>
+				</vertex>
+				<vertex v="0.0839038 -0.516806 -0.851981">
+					<tangent_quat v="0.962356 -0.0100961 0.0447577 0.267876"/>
+					<tex_coord v="0.265623 0.672879"/>
+				</vertex>
+				<vertex v="0.432902 -0.516806 -0.738584">
+					<tangent_quat v="0.929085 -0.0731764 0.254817 0.257885"/>
+					<tex_coord v="0.334377 0.672879"/>
+				</vertex>
+				<vertex v="0.83621 -0.516806 -0.183479">
+					<tangent_quat v="0.752254 -0.165622 0.601868 0.210782"/>
+					<tex_coord v="0.465623 0.672879"/>
+				</vertex>
+				<vertex v="0.83621 -0.516806 0.183479">
+					<tangent_quat v="0.601868 -0.210782 0.752254 0.165622"/>
+					<tex_coord v="0.534377 0.672879"/>
+				</vertex>
+				<vertex v="0.291836 -0.932671 0.212031">
+					<tangent_quat v="0.372808 -0.508464 0.731676 0.259075"/>
+					<tex_coord v="0.6 0.882528"/>
+				</vertex>
+				<vertex v="0.544374 -0.739749 0.395511">
+					<tangent_quat v="0.415898 -0.35725 0.816247 0.182028"/>
+					<tex_coord v="0.6 0.765056"/>
+				</vertex>
+				<vertex v="-0.111471 -0.932671 0.343074">
+					<tangent_quat v="0.128461 0.563637 -0.811069 0.0892713"/>
+					<tex_coord v="0.8 0.882528"/>
+				</vertex>
+				<vertex v="-0.111471 -0.932671 0.343074">
+					<tangent_quat v="0.128461 0.563637 -0.811069 0.0892713"/>
+					<tex_coord v="-0.2 0.882528"/>
+				</vertex>
+				<vertex v="-0.111471 -0.932671 0.343074">
+					<tangent_quat v="0.128461 0.563637 -0.811069 0.0892713"/>
+					<tex_coord v="-0.2 0.882528"/>
+				</vertex>
+				<vertex v="-0.207932 -0.739749 0.63995">
+					<tangent_quat v="0.143309 0.396014 -0.904816 0.0627225"/>
+					<tex_coord v="0.8 0.765056"/>
+				</vertex>
+				<vertex v="-0.360729 -0.932671 -3.15359e-008">
+					<tangent_quat v="0.580661 0.403519 -0.580661 0.40352"/>
+					<tex_coord v="3.79455e-008 0.882528"/>
+				</vertex>
+				<vertex v="-0.672883 -0.739749 -5.88253e-008">
+					<tangent_quat v="0.647777 0.283515 -0.647777 0.283515"/>
+					<tex_coord v="3.79455e-008 0.765056"/>
+				</vertex>
+				<vertex v="-0.111471 -0.932671 -0.343074">
+					<tangent_quat v="0.811069 0.0892714 -0.128461 0.563637"/>
+					<tex_coord v="0.2 0.882528"/>
+				</vertex>
+				<vertex v="-0.207932 -0.739749 -0.63995">
+					<tangent_quat v="0.904816 0.0627225 -0.143309 0.396014"/>
+					<tex_coord v="0.2 0.765056"/>
+				</vertex>
+				<vertex v="0.291836 -0.932671 -0.212031">
+					<tangent_quat v="0.731676 -0.259076 0.372808 0.508464"/>
+					<tex_coord v="0.4 0.882528"/>
+				</vertex>
+				<vertex v="0.544374 -0.739749 -0.39551">
+					<tangent_quat v="0.816246 -0.182028 0.415899 0.35725"/>
+					<tex_coord v="0.4 0.765056"/>
+				</vertex>
+				<vertex v="0.479506 0.805422 0.348381">
+					<tangent_quat v="-0.406955 -0.394935 -0.798694 0.20123"/>
+					<tex_coord v="0.6 0.201939"/>
+				</vertex>
+				<vertex v="-0.183155 0.805422 0.563693">
+					<tangent_quat v="-0.140227 0.437789 0.885359 0.069339"/>
+					<tex_coord v="0.8 0.201939"/>
+				</vertex>
+				<vertex v="-0.592702 0.805422 -6.15308e-008">
+					<tangent_quat v="-0.633847 0.313422 0.633847 0.313422"/>
+					<tex_coord v="3.79455e-008 0.201939"/>
+				</vertex>
+				<vertex v="-0.183155 0.805422 -0.563693">
+					<tangent_quat v="-0.885359 0.069339 0.140227 0.437789"/>
+					<tex_coord v="0.2 0.201939"/>
+				</vertex>
+				<vertex v="0.479506 0.805422 -0.348381">
+					<tangent_quat v="-0.798694 -0.20123 -0.406955 0.394935"/>
+					<tex_coord v="0.4 0.201939"/>
+				</vertex>
+				<vertex v="0.985456 -0.169933 8.2041e-008">
+					<tangent_quat v="0.703958 -0.06662 0.703959 0.06662"/>
+					<tex_coord v="0.5 0.554355"/>
+				</vertex>
+				<vertex v="0.304522 -0.169933 0.937224">
+					<tangent_quat v="0.155738 -0.093055 0.983291 0.0147385"/>
+					<tex_coord v="0.7 0.554355"/>
+				</vertex>
+				<vertex v="-0.79725 -0.169933 0.579236">
+					<tangent_quat v="0.451969 0.0839461 -0.887039 0.0427727"/>
+					<tex_coord v="0.9 0.554355"/>
+				</vertex>
+				<vertex v="-0.79725 -0.169933 -0.579236">
+					<tangent_quat v="0.887039 0.0427726 -0.451969 0.083946"/>
+					<tex_coord v="0.1 0.554355"/>
+				</vertex>
+				<vertex v="0.304523 -0.169933 -0.937224">
+					<tangent_quat v="0.983291 -0.0147385 0.155738 0.0930549"/>
+					<tex_coord v="0.3 0.554355"/>
+				</vertex>
+				<vertex v="0.79725 0.169933 0.579236">
+					<tangent_quat v="-0.451969 -0.0839461 -0.887039 0.0427727"/>
+					<tex_coord v="0.6 0.445645"/>
+				</vertex>
+				<vertex v="-0.304523 0.169933 0.937224">
+					<tangent_quat v="-0.155738 0.093055 0.983291 0.0147385"/>
+					<tex_coord v="0.8 0.445645"/>
+				</vertex>
+				<vertex v="-0.985456 0.169933 -1.02551e-007">
+					<tangent_quat v="-0.703958 0.06662 0.703958 0.0666201"/>
+					<tex_coord v="3.79455e-008 0.445645"/>
+				</vertex>
+				<vertex v="-0.304522 0.169933 -0.937224">
+					<tangent_quat v="-0.983291 0.0147384 0.155738 0.093055"/>
+					<tex_coord v="0.2 0.445645"/>
+				</vertex>
+				<vertex v="0.797251 0.169933 -0.579236">
+					<tangent_quat v="-0.887039 -0.0427727 -0.451969 0.0839461"/>
+					<tex_coord v="0.4 0.445645"/>
+				</vertex>
+				<vertex v="0.183155 -0.805422 0.563693">
+					<tangent_quat v="0.140227 -0.437789 0.885359 0.069339"/>
+					<tex_coord v="0.7 0.798061"/>
+				</vertex>
+				<vertex v="-0.479506 -0.805422 0.348381">
+					<tangent_quat v="0.406955 0.394935 -0.798694 0.20123"/>
+					<tex_coord v="0.9 0.798061"/>
+				</vertex>
+				<vertex v="-0.479506 -0.805422 0.348381">
+					<tangent_quat v="0.406955 0.394935 -0.798694 0.20123"/>
+					<tex_coord v="-0.1 0.798061"/>
+				</vertex>
+				<vertex v="-0.479506 -0.805422 0.348381">
+					<tangent_quat v="0.406955 0.394935 -0.798694 0.20123"/>
+					<tex_coord v="-0.1 0.798061"/>
+				</vertex>
+				<vertex v="-0.479506 -0.805422 0.348381">
+					<tangent_quat v="0.406955 0.394935 -0.798694 0.20123"/>
+					<tex_coord v="-0.1 0.798061"/>
+				</vertex>
+				<vertex v="-0.479506 -0.805422 -0.348381">
+					<tangent_quat v="0.798694 0.20123 -0.406955 0.394935"/>
+					<tex_coord v="0.1 0.798061"/>
+				</vertex>
+				<vertex v="0.183155 -0.805422 -0.563693">
+					<tangent_quat v="0.885359 -0.0693391 0.140227 0.437789"/>
+					<tex_coord v="0.3 0.798061"/>
+				</vertex>
+				<vertex v="0.592702 -0.805422 1.23062e-007">
+					<tangent_quat v="0.633847 -0.313423 0.633847 0.313422"/>
+					<tex_coord v="0.5 0.798061"/>
+				</vertex>
+			</vertices_chunk>
+			<triangles_chunk>
+				<triangle index="22 20 1"/>
+				<triangle index="100 21 20"/>
+				<triangle index="22 100 20"/>
+				<triangle index="23 100 22"/>
+				<triangle index="35 5 21"/>
+				<triangle index="100 35 21"/>
+				<triangle index="36 35 100"/>
+				<triangle index="23 36 100"/>
+				<triangle index="6 36 23"/>
+				<triangle index="24 22 2"/>
+				<triangle index="101 23 22"/>
+				<triangle index="24 101 22"/>
+				<triangle index="28 101 24"/>
+				<triangle index="37 6 23"/>
+				<triangle index="101 37 23"/>
+				<triangle index="38 37 101"/>
+				<triangle index="28 38 101"/>
+				<triangle index="7 38 28"/>
+				<triangle index="31 25 3"/>
+				<triangle index="102 29 26"/>
+				<triangle index="31 102 27"/>
+				<triangle index="32 102 31"/>
+				<triangle index="39 7 28"/>
+				<triangle index="102 40 30"/>
+				<triangle index="44 41 102"/>
+				<triangle index="32 44 102"/>
+				<triangle index="8 44 32"/>
+				<triangle index="33 31 4"/>
+				<triangle index="103 32 31"/>
+				<triangle index="33 103 31"/>
+				<triangle index="34 103 33"/>
+				<triangle index="45 8 32"/>
+				<triangle index="103 45 32"/>
+				<triangle index="46 45 103"/>
+				<triangle index="34 46 103"/>
+				<triangle index="9 46 34"/>
+				<triangle index="20 33 0"/>
+				<triangle index="104 34 33"/>
+				<triangle index="20 104 33"/>
+				<triangle index="21 104 20"/>
+				<triangle index="47 9 34"/>
+				<triangle index="104 47 34"/>
+				<triangle index="48 47 104"/>
+				<triangle index="21 48 104"/>
+				<triangle index="5 48 21"/>
+				<triangle index="49 65 5"/>
+				<triangle index="105 66 65"/>
+				<triangle index="49 105 65"/>
+				<triangle index="50 105 49"/>
+				<triangle index="86 14 66"/>
+				<triangle index="105 86 66"/>
+				<triangle index="87 86 105"/>
+				<triangle index="50 87 105"/>
+				<triangle index="10 87 50"/>
+				<triangle index="51 67 6"/>
+				<triangle index="106 68 67"/>
+				<triangle index="51 106 67"/>
+				<triangle index="52 106 51"/>
+				<triangle index="75 10 68"/>
+				<triangle index="106 75 68"/>
+				<triangle index="76 75 106"/>
+				<triangle index="52 76 106"/>
+				<triangle index="11 76 52"/>
+				<triangle index="53 69 7"/>
+				<triangle index="107 70 69"/>
+				<triangle index="53 107 69"/>
+				<triangle index="56 107 53"/>
+				<triangle index="77 11 70"/>
+				<triangle index="107 77 70"/>
+				<triangle index="78 77 107"/>
+				<triangle index="56 78 107"/>
+				<triangle index="12 79 57"/>
+				<triangle index="61 71 8"/>
+				<triangle index="108 72 71"/>
+				<triangle index="61 108 71"/>
+				<triangle index="62 108 61"/>
+				<triangle index="82 12 72"/>
+				<triangle index="108 82 72"/>
+				<triangle index="83 82 108"/>
+				<triangle index="62 83 108"/>
+				<triangle index="13 83 62"/>
+				<triangle index="63 73 9"/>
+				<triangle index="109 74 73"/>
+				<triangle index="63 109 73"/>
+				<triangle index="64 109 63"/>
+				<triangle index="84 13 74"/>
+				<triangle index="109 84 74"/>
+				<triangle index="85 84 109"/>
+				<triangle index="64 85 109"/>
+				<triangle index="14 85 64"/>
+				<triangle index="50 68 10"/>
+				<triangle index="110 67 68"/>
+				<triangle index="50 110 68"/>
+				<triangle index="49 110 50"/>
+				<triangle index="36 6 67"/>
+				<triangle index="110 36 67"/>
+				<triangle index="35 36 110"/>
+				<triangle index="49 35 110"/>
+				<triangle index="5 35 49"/>
+				<triangle index="52 70 11"/>
+				<triangle index="111 69 70"/>
+				<triangle index="52 111 70"/>
+				<triangle index="51 111 52"/>
+				<triangle index="38 7 69"/>
+				<triangle index="111 38 69"/>
+				<triangle index="37 38 111"/>
+				<triangle index="51 37 111"/>
+				<triangle index="6 37 51"/>
+				<triangle index="58 72 12"/>
+				<triangle index="112 71 72"/>
+				<triangle index="59 112 72"/>
+				<triangle index="54 112 60"/>
+				<triangle index="44 8 71"/>
+				<triangle index="112 44 71"/>
+				<triangle index="42 44 112"/>
+				<triangle index="55 43 112"/>
+				<triangle index="7 39 53"/>
+				<triangle index="62 74 13"/>
+				<triangle index="113 73 74"/>
+				<triangle index="62 113 74"/>
+				<triangle index="61 113 62"/>
+				<triangle index="46 9 73"/>
+				<triangle index="113 46 73"/>
+				<triangle index="45 46 113"/>
+				<triangle index="61 45 113"/>
+				<triangle index="8 45 61"/>
+				<triangle index="64 66 14"/>
+				<triangle index="114 65 66"/>
+				<triangle index="64 114 66"/>
+				<triangle index="63 114 64"/>
+				<triangle index="48 5 65"/>
+				<triangle index="114 48 65"/>
+				<triangle index="47 48 114"/>
+				<triangle index="63 47 114"/>
+				<triangle index="9 47 63"/>
+				<triangle index="88 90 16"/>
+				<triangle index="115 93 90"/>
+				<triangle index="88 115 90"/>
+				<triangle index="89 115 88"/>
+				<triangle index="76 11 93"/>
+				<triangle index="115 76 93"/>
+				<triangle index="75 76 115"/>
+				<triangle index="89 75 115"/>
+				<triangle index="10 75 89"/>
+				<triangle index="91 94 17"/>
+				<triangle index="117 95 94"/>
+				<triangle index="92 118 94"/>
+				<triangle index="93 116 90"/>
+				<triangle index="80 12 95"/>
+				<triangle index="119 81 95"/>
+				<triangle index="77 78 116"/>
+				<triangle index="93 77 116"/>
+				<triangle index="11 77 93"/>
+				<triangle index="94 96 18"/>
+				<triangle index="120 97 96"/>
+				<triangle index="94 120 96"/>
+				<triangle index="95 120 94"/>
+				<triangle index="83 13 97"/>
+				<triangle index="120 83 97"/>
+				<triangle index="82 83 120"/>
+				<triangle index="95 82 120"/>
+				<triangle index="12 82 95"/>
+				<triangle index="96 98 19"/>
+				<triangle index="121 99 98"/>
+				<triangle index="96 121 98"/>
+				<triangle index="97 121 96"/>
+				<triangle index="85 14 99"/>
+				<triangle index="121 85 99"/>
+				<triangle index="84 85 121"/>
+				<triangle index="97 84 121"/>
+				<triangle index="13 84 97"/>
+				<triangle index="98 88 15"/>
+				<triangle index="122 89 88"/>
+				<triangle index="98 122 88"/>
+				<triangle index="99 122 98"/>
+				<triangle index="87 10 89"/>
+				<triangle index="122 87 89"/>
+				<triangle index="86 87 122"/>
+				<triangle index="99 86 122"/>
+				<triangle index="14 86 99"/>
+			</triangles_chunk>
+		</mesh>
+	</meshes_chunk>
+</model>

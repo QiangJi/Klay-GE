@@ -1,0 +1,60 @@
+#ifndef _MODEL_HPP
+#define _MODEL_HPP
+
+#include <KlayGE/PreDeclare.hpp>
+#include <string>
+#include <KlayGE/Mesh.hpp>
+
+class DetailedMesh;
+
+class DetailedModel : public KlayGE::RenderModel
+{
+	friend class DetailedMesh;
+
+public:
+	DetailedModel(std::wstring const & name);
+
+	void EyePos(KlayGE::float3 const & eye_pos);
+	void LightPos(KlayGE::float3 const & light_pos);
+	void LightColor(KlayGE::float3 const & light_color);
+	void LightFalloff(KlayGE::float3 const & light_falloff);
+
+	void BackFaceDepthPass(bool dfdp);
+	void BackFaceDepthTex(KlayGE::TexturePtr const & tex, bool pack_to_rgba);
+	void SigmaT(float sigma_t);
+	void MtlThickness(float thickness);
+
+	KlayGE::TexturePtr const & EmptyBumpMap() const
+	{
+		return empty_bump_map_;
+	}
+
+private:
+	KlayGE::TexturePtr empty_bump_map_;
+};
+
+class DetailedMesh : public KlayGE::StaticMesh
+{
+public:
+	DetailedMesh(KlayGE::RenderModelPtr const & model, std::wstring const & name);
+
+	void OnRenderBegin();
+
+	void EyePos(KlayGE::float3 const & eye_pos);
+	void LightPos(KlayGE::float3 const & light_pos);
+	void LightColor(KlayGE::float3 const & light_color);
+	void LightFalloff(KlayGE::float3 const & light_falloff);
+
+	void BackFaceDepthPass(bool dfdp);
+	void BackFaceDepthTex(KlayGE::TexturePtr const & tex, bool pack_to_rgba);
+	void SigmaT(float sigma_t);
+	void MtlThickness(float thickness);
+
+	void BuildMeshInfo();
+
+private:
+	bool depth_texture_support_;
+	bool pack_to_rgba_;
+};
+
+#endif		// _MODEL_HPP

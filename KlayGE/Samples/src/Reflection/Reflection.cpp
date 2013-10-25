@@ -1,0 +1,446 @@
+#include <KlayGE/KlayGE.hpp>
+#include <KlayGE/ResLoader.hpp>
+#include <KlayGE/Context.hpp>
+#include <KlayGE/FrameBuffer.hpp>
+#include <KlayGE/RenderFactory.hpp>
+#include <KlayGE/InputFactory.hpp>
+#include <KlayGE/RenderEngine.hpp>
+#include <KlayGE/RenderEffect.hpp>
+#include <KlayGE/SceneObject.hpp>
+#include <KlayGE/SceneObjectHelper.hpp>
+#include <KlayGE/Camera.hpp>
+#include <KlayGE/Mesh.hpp>
+#include <KlayGE/PostProcess.hpp>
+#include <KlayGE/Light.hpp>
+#include <KlayGE/DeferredRenderingLayer.hpp>
+#include <KlayGE/UI.hpp>
+#include <KlayGE/RenderableHelper.hpp>
+
+#include <KlayGE/SSRPostProcess.hpp>
+
+#include <sstream>
+
+#include "SampleCommon.hpp"
+#include "Reflection.hpp"
+
+using namespace KlayGE;
+
+namespace
+{
+	class ReflectMesh : public StaticMesh
+	{
+	public:
+		ReflectMesh(RenderModelPtr const & model, std::wstring const & name)
+			: StaticMesh(model, name)
+		{
+			RenderEffectPtr effect = SyncLoadRenderEffect("Reflection.fxml");
+			this->BindDeferredEffect(effect);
+
+			special_shading_tech_ = effect->TechniqueByName("ReflectSpecialShadingTech");
+			special_shading_alpha_blend_back_tech_ = special_shading_tech_;
+			special_shading_alpha_blend_front_tech_ = special_shading_tech_;
+			technique_ = special_shading_tech_;
+		}
+
+		void BuildMeshInfo()
+		{
+			StaticMesh::BuildMeshInfo();
+
+			mtl_->diffuse = float3(0.2f, 0.2f, 0.2f);
+			mtl_->shininess = 128;
+			mtl_->specular = float3(0.6f, 0.6f, 0.6f);
+		}
+
+		void OnRenderBegin()
+		{
+			StaticMesh::OnRenderBegin();
+					
+			switch (type_)
+			{
+			case PT_OpaqueSpecialShading:
+			case PT_TransparencyBackSpecialShading:
+			case PT_TransparencyFrontSpecialShading:
+				{
+					App3DFramework const & app = Context::Instance().AppInstance();
+					Camera const & camera = app.ActiveCamera();
+					*(technique_->Effect().ParameterByName("proj")) = camera.ProjMatrix();
+					*(technique_->Effect().ParameterByName("inv_proj")) = camera.InverseProjMatrix();
+					float q = camera.FarPlane() / (camera.FarPlane() - camera.NearPlane());
+					float3 near_q_far(camera.NearPlane() * q, q, camera.FarPlane());
+					*(technique_->Effect().ParameterByName("near_q_far")) = near_q_far;
+					*(technique_->Effect().ParameterByName("ray_length")) = camera.FarPlane() - camera.NearPlane();
+					*(technique_->Effect().ParameterByName("inv_view")) = camera.InverseViewMatrix();
+				}
+				break;
+
+			default:
+				break;
+			}
+		}
+
+		void FrontReflectionTex(TexturePtr const & tex)
+		{
+			*(technique_->Effect().ParameterByName("front_side_tex")) = tex;
+		}
+		void FrontReflectionDepthTex(TexturePtr const & tex)
+		{
+			*(technique_->Effect().ParameterByName("front_side_depth_tex")) = tex;
+		}
+
+		void BackReflectionTex(TexturePtr const & tex)
+		{
+			*(technique_->Effect().ParameterByName("back_side_tex")) = tex;
+		}
+		void BackReflectionDepthTex(TexturePtr const & tex)
+		{
+			*(technique_->Effect().ParameterByName("back_side_depth_tex")) = tex;
+		}
+
+		void BackCamera(CameraPtr const & camera)
+		{
+			float4x4 const & view = camera->ViewMatrix();
+			float4x4 const & proj = camera->ProjMatrix();
+
+			float4x4 const mv = model_mat_ * view;
+
+			*(technique_->Effect().ParameterByName("back_model_view")) = mv;
+			*(technique_->Effect().ParameterByName("back_mvp")) = mv * proj;
+
+			App3DFramework const & app = Context::Instance().AppInstance();
+			Camera const & scene_camera = app.ActiveCamera();
+			*(technique_->Effect().ParameterByName("eye_in_back_camera")) = MathLib::transform_coord(scene_camera.EyePos(), view);
+		}
+
+		void MinSamples(int32_t samples)
+		{
+			*(technique_->Effect().ParameterByName("min_samples")) = samples;
+		}
+		void MaxSamples(int32_t samples)
+		{
+			*(technique_->Effect().ParameterByName("max_samples")) = samples;
+		}
+
+		void EnbleReflection(bool enable)
+		{
+			if (enable)
+			{
+				effect_attrs_ |= EA_SpecialShading;
+			}
+			else
+			{
+				effect_attrs_ &= ~EA_SpecialShading;
+			}
+		}
+
+		void SkyBox(TexturePtr const & y_cube, TexturePtr const & c_cube)
+		{
+			*(technique_->Effect().ParameterByName("skybox_tex")) = y_cube;
+			*(technique_->Effect().ParameterByName("skybox_C_tex")) = c_cube;
+		}
+
+	private:
+		TexturePtr front_refl_tex_;
+		TexturePtr front_refl_depth_tex_;
+		TexturePtr back_refl_tex_;
+		TexturePtr back_refl_depth_tex_;
+	};
+
+	class DinoMesh : public StaticMesh
+	{
+	public:
+		DinoMesh(RenderModelPtr const & model, std::wstring const & name)
+			: StaticMesh(model, name)
+		{
+		}
+
+		void BuildMeshInfo()
+		{
+			StaticMesh::BuildMeshInfo();
+
+			mtl_->diffuse = float3(0.73f, 1, 0.46f);
+			if (Context::Instance().Config().graphics_cfg.gamma)
+			{
+				mtl_->diffuse.x() = MathLib::srgb_to_linear(mtl_->diffuse.x());
+				mtl_->diffuse.y() = MathLib::srgb_to_linear(mtl_->diffuse.y());
+				mtl_->diffuse.z() = MathLib::srgb_to_linear(mtl_->diffuse.z());
+			}
+			mtl_->shininess = 64;
+			mtl_->specular = float3(0.8f, 0.8f, 0.8f);
+		}
+	};
+
+
+	enum
+	{
+		Exit,
+	};
+
+	InputActionDefine actions[] =
+	{
+		InputActionDefine(Exit, KS_Escape),
+	};
+}
+
+int SampleMain()
+{
+	ContextCfg cfg = Context::Instance().Config();
+	cfg.deferred_rendering = true;
+	Context::Instance().Config(cfg);
+
+	ScreenSpaceReflectionApp app;
+	app.Create();
+	app.Run();
+	
+	return 0;
+}
+
+ScreenSpaceReflectionApp::ScreenSpaceReflectionApp()
+	: App3DFramework("Reflection")
+{
+	ResLoader::Instance().AddPath("../../Samples/media/CausticsMap");
+	ResLoader::Instance().AddPath("../../Samples/media/Reflection");
+}
+
+bool ScreenSpaceReflectionApp::ConfirmDevice() const
+{
+	RenderDeviceCaps const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
+	if (caps.max_shader_model < 2)
+	{
+		return false;
+	}
+	return true;
+}
+
+void ScreenSpaceReflectionApp::InitObjects()
+{
+	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+
+	loading_percentage_ = 0;
+	c_cube_tl_ = ASyncLoadTexture("Lake_CraterLake03_c.dds", EAH_GPU_Read | EAH_Immutable);
+	y_cube_tl_ = ASyncLoadTexture("Lake_CraterLake03_y.dds", EAH_GPU_Read | EAH_Immutable);
+	teapot_ml_ = ASyncLoadModel("teapot.meshml", EAH_GPU_Read | EAH_Immutable,
+		CreateModelFactory<RenderModel>(), CreateMeshFactory<ReflectMesh>());
+	dino_ml_ = ASyncLoadModel("dino50.7z//dino50.meshml", EAH_GPU_Read | EAH_Immutable,
+		CreateModelFactory<RenderModel>(), CreateMeshFactory<DinoMesh>());
+
+	this->LookAt(float3(2.0f, 2.0f, -5.0f), float3(0.0f, 1.0f, 0.0f), float3(0, 1, 0));
+	this->Proj(0.1f, 500.0f);
+	tb_controller_.AttachCamera(this->ActiveCamera());
+	tb_controller_.Scalers(0.003f, 0.05f);
+
+	screen_camera_path_ = LoadCameraPath(ResLoader::Instance().Open("Reflection.cam_path"));
+	screen_camera_path_->AttachCamera(this->ActiveCamera());
+	this->ActiveCamera().AddToSceneManager();
+
+	point_light_ = MakeSharedPtr<PointLightSource>();
+	point_light_->Attrib(LightSource::LSA_NoShadow);
+	point_light_->Color(float3(1, 1, 1));
+	point_light_->Position(float3(0, 3, -2));
+	point_light_->Falloff(float3(1, 0, 0.3f));
+	point_light_->AddToSceneManager();
+
+	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
+
+	font_ = SyncLoadFont("gkai00mp.kfont");
+
+	sky_box_ = MakeSharedPtr<SceneObjectSkyBox>();
+	sky_box_->AddToSceneManager();
+
+	back_refl_fb_ = rf.MakeFrameBuffer();
+
+	InputEngine& inputEngine(Context::Instance().InputFactoryInstance().InputEngineInstance());
+	InputActionMap actionMap;
+	actionMap.AddActions(actions, actions + sizeof(actions) / sizeof(actions[0]));
+
+	action_handler_t input_handler = MakeSharedPtr<input_signal>();
+	input_handler->connect(KlayGE::bind(&ScreenSpaceReflectionApp::InputHandler, this, KlayGE::placeholders::_1, KlayGE::placeholders::_2));
+	inputEngine.ActionMap(actionMap, input_handler);
+
+	UIManager::Instance().Load(ResLoader::Instance().Open("Reflection.uiml"));
+	parameter_dialog_ = UIManager::Instance().GetDialog("Reflection");
+
+	id_min_sample_num_static_ = parameter_dialog_->IDFromName("min_sample_num_static");
+	id_min_sample_num_slider_ = parameter_dialog_->IDFromName("min_sample_num_slider");
+	parameter_dialog_->Control<UISlider>(id_min_sample_num_slider_)->OnValueChangedEvent().connect(KlayGE::bind(&ScreenSpaceReflectionApp::MinSampleNumHandler, this, KlayGE::placeholders::_1));
+	this->MinSampleNumHandler(*(parameter_dialog_->Control<UISlider>(id_min_sample_num_slider_)));
+
+	id_max_sample_num_static_ = parameter_dialog_->IDFromName("max_sample_num_static");
+	id_max_sample_num_slider_ = parameter_dialog_->IDFromName("max_sample_num_slider");
+	parameter_dialog_->Control<UISlider>(id_max_sample_num_slider_)->OnValueChangedEvent().connect(KlayGE::bind(&ScreenSpaceReflectionApp::MaxSampleNumHandler, this, KlayGE::placeholders::_1));
+	this->MaxSampleNumHandler(*(parameter_dialog_->Control<UISlider>(id_max_sample_num_slider_)));
+
+	id_enable_reflection_ = parameter_dialog_->IDFromName("enable_reflection");
+	parameter_dialog_->Control<UICheckBox>(id_enable_reflection_)->OnChangedEvent().connect(KlayGE::bind(&ScreenSpaceReflectionApp::EnbleReflectionHandler, this, KlayGE::placeholders::_1));
+	this->EnbleReflectionHandler(*(parameter_dialog_->Control<UICheckBox>(id_enable_reflection_)));
+}
+
+void ScreenSpaceReflectionApp::OnResize(KlayGE::uint32_t width, KlayGE::uint32_t height)
+{
+	App3DFramework::OnResize(width, height);
+
+	UIManager::Instance().SettleCtrls();
+
+	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+	RenderEngine& re = rf.RenderEngineInstance();
+
+	deferred_rendering_->SetupViewport(1, re.CurFrameBuffer(), VPAM_NoSSVO | VPAM_NoGI);
+	
+	back_refl_tex_ = rf.MakeTexture2D(width / 2, width / 2, 1, 1, 
+		deferred_rendering_->ShadingTex(1)->Format(), 1, 0, EAH_GPU_Read | EAH_GPU_Write, NULL);
+	back_refl_ds_tex_ = rf.MakeTexture2D(width / 2, width / 2, 1, 1, 
+		EF_D16, 1, 0, EAH_GPU_Read | EAH_GPU_Write, NULL);
+	back_refl_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*back_refl_tex_, 0, 1, 0));
+	back_refl_fb_->Attach(FrameBuffer::ATT_DepthStencil, rf.Make2DDepthStencilRenderView(*back_refl_ds_tex_, 0, 1, 0));
+
+	deferred_rendering_->SetupViewport(0, back_refl_fb_, VPAM_NoTransparencyBack | VPAM_NoTransparencyFront | VPAM_NoSimpleForward | VPAM_NoGI | VPAM_NoSSVO);
+
+	screen_camera_ = re.CurFrameBuffer()->GetViewport()->camera;
+}
+
+void ScreenSpaceReflectionApp::InputHandler(KlayGE::InputEngine const & /*sender*/, KlayGE::InputAction const & action)
+{
+	switch (action.first)
+	{
+	case Exit:
+		this->Quit();
+		break;
+	}
+}
+
+void ScreenSpaceReflectionApp::MinSampleNumHandler(KlayGE::UISlider const & sender)
+{
+	int32_t sample_num = sender.GetValue();
+	if (teapot_)
+	{
+		checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->MinSamples(sample_num);
+
+		std::wostringstream oss;
+		oss << "Min Samples: " << sample_num;
+		parameter_dialog_->Control<UIStatic>(id_min_sample_num_static_)->SetText(oss.str());
+	}
+}
+
+void ScreenSpaceReflectionApp::MaxSampleNumHandler(KlayGE::UISlider const & sender)
+{
+	int32_t sample_num = sender.GetValue();
+	if (teapot_)
+	{
+		checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->MaxSamples(sample_num);
+
+		std::wostringstream oss;
+		oss << "Max Samples: " << sample_num;
+		parameter_dialog_->Control<UIStatic>(id_max_sample_num_static_)->SetText(oss.str());
+	}
+}
+
+void ScreenSpaceReflectionApp::EnbleReflectionHandler(KlayGE::UICheckBox const & sender)
+{
+	bool enabled = sender.GetChecked();
+	if (teapot_)
+	{
+		checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->EnbleReflection(enabled);
+	}
+}
+
+void ScreenSpaceReflectionApp::DoUpdateOverlay()
+{
+	UIManager::Instance().Render();
+
+	font_->RenderText(0, 0, Color(1, 1, 0, 1), L"Reflection", 16);
+
+	std::wostringstream stream;
+	stream.precision(2);
+	stream << std::fixed << this->FPS() << " FPS";
+	font_->RenderText(0, 18, Color(1, 1, 0, 1), stream.str(), 16);
+}
+
+uint32_t ScreenSpaceReflectionApp::DoUpdate(KlayGE::uint32_t pass)
+{
+	uint32_t urt;
+
+	if (0 == pass)
+	{
+		if (loading_percentage_ < 100)
+		{
+			if (loading_percentage_ < 30)
+			{
+				RenderModelPtr model = teapot_ml_();
+				if (model)
+				{
+					teapot_ = MakeSharedPtr<SceneObjectHelper>(model->Mesh(0), SceneObjectHelper::SOA_Cullable);
+					teapot_->ModelMatrix(MathLib::scaling(float3(15, 15, 15)));
+					teapot_->AddToSceneManager();
+
+					this->MinSampleNumHandler(*(parameter_dialog_->Control<UISlider>(id_min_sample_num_slider_)));
+					this->MaxSampleNumHandler(*(parameter_dialog_->Control<UISlider>(id_max_sample_num_slider_)));
+					this->EnbleReflectionHandler(*(parameter_dialog_->Control<UICheckBox>(id_enable_reflection_)));
+
+					loading_percentage_ = 30;
+				}
+			}
+			else if (loading_percentage_ < 40)
+			{
+				TexturePtr y_cube_tex = y_cube_tl_();
+				TexturePtr c_cube_tex = c_cube_tl_();
+				checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube_tex, c_cube_tex);
+				checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->SkyBox(y_cube_tex, c_cube_tex);
+				if (!!y_cube_tex && !!c_cube_tex)
+				{
+					loading_percentage_ = 40;
+				}
+			}
+			else if (loading_percentage_ < 90)
+			{
+				RenderModelPtr model = dino_ml_();
+				if (model)
+				{
+					dino_ = MakeSharedPtr<SceneObjectHelper>(model->Mesh(0), SceneObjectHelper::SOA_Cullable);
+					dino_->ModelMatrix(MathLib::scaling(float3(2, 2, 2)) * MathLib::translation(0.0f, 1.0f, -2.5f));
+					dino_->AddToSceneManager();
+
+					loading_percentage_ = 100;
+				}
+			}
+		}
+		else
+		{
+			CameraPtr const & back_camera = back_refl_fb_->GetViewport()->camera;
+
+			float3 eye = screen_camera_->EyePos();
+			float3 at = screen_camera_->LookAt();
+
+			float3 center = MathLib::transform_coord(teapot_->PosBound().Center(), teapot_->ModelMatrix());
+			float3 direction = eye - at;
+			Plane refl_plane = MathLib::normalize(MathLib::from_point_normal(center, direction));
+			float4x4 refl_mat = MathLib::reflect(refl_plane);
+
+			float3 refl_eye_pos = MathLib::transform_coord(eye, refl_mat);
+			float3 refl_eye_at = MathLib::transform_coord(at, refl_mat);
+			back_camera->ViewParams(center, center + direction, screen_camera_->UpVec());
+			back_camera->ProjParams(PI / 2, 1, screen_camera_->NearPlane(), screen_camera_->FarPlane());
+
+			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->BackCamera(back_camera);
+
+			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->FrontReflectionTex(deferred_rendering_->PrevFrameShadingTex(1));
+			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->FrontReflectionDepthTex(deferred_rendering_->PrevFrameDepthTex(1));
+			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->BackReflectionTex(deferred_rendering_->CurrFrameShadingTex(0));
+			checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->BackReflectionDepthTex(deferred_rendering_->CurrFrameDepthTex(0));
+		}
+	}
+
+	urt = deferred_rendering_->Update(pass);
+
+	if (teapot_)
+	{
+		if (0 == deferred_rendering_->ActiveViewport())
+		{
+			teapot_->Visible(false);
+		}
+		else
+		{
+			teapot_->Visible(true);
+		}
+	}
+
+	return urt;
+}

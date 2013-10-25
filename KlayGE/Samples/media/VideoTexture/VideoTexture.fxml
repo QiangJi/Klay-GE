@@ -1,0 +1,69 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="Quaternion.fxml"/>
+	<include name="Lighting.fxml"/>
+
+	<parameter type="float4x4" name="mvp"/>
+	<parameter type="float4x4" name="mv"/>
+	<parameter type="float3" name="eye_pos"/>
+	<parameter type="float3" name="light_pos"/>
+	<parameter type="float3" name="light_color"/>
+	<parameter type="float3" name="light_falloff"/>
+
+	<parameter type="float3" name="pos_center"/>
+	<parameter type="float3" name="pos_extent"/>
+	<parameter type="float2" name="tc_center"/>
+	<parameter type="float2" name="tc_extent"/>
+
+	<parameter type="texture2D" name="video_tex"/>
+	<parameter type="sampler" name="video_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="wrap"/>
+		<state name="address_v" value="wrap"/>
+	</parameter>
+
+	<shader>
+		<![CDATA[
+void ObjectVS(float4 Position : POSITION,
+					float4 tangent_quat : TANGENT,
+					float2 Tex0 : TEXCOORD0,
+					out float2 oTex0 : TEXCOORD0,
+					out float3 oNormal : TEXCOORD1,
+					out float3 oLightVec : TEXCOORD2,
+					out float3 oHalfVec : TEXCOORD3,
+					out float4 oPos : SV_Position)
+{
+	Position = float4(Position.xyz * pos_extent + pos_center, 1);
+	Tex0 = Tex0 * tc_extent + tc_center;
+	tangent_quat = tangent_quat * 2 - 1;
+	
+	oPos = mul(Position, mvp);
+	oNormal = mul(transform_quat(float3(0, 0, 1), tangent_quat), (float3x3)mv);
+	oTex0 = Tex0;
+
+	oLightVec = light_pos - Position.xyz;
+	float3 view_vec = eye_pos - Position.xyz;
+	oHalfVec = normalize(oLightVec) + normalize(view_vec);
+}
+
+float4 ObjectPS(float2 Tex0 : TEXCOORD0, float3 normal : TEXCOORD1, float3 light_vec : TEXCOORD2, float3 half_vec : TEXCOORD3) : SV_Target 
+{
+	float atten = attenuation_term(0, -light_vec.xyz, light_falloff);
+
+	light_vec = normalize(light_vec);
+	half_vec = normalize(half_vec);
+
+	float3 diffuse = video_tex.Sample(video_sampler, Tex0).rgb;
+	return float4(0.2f * diffuse + atten * light_color * calc_brdf(diffuse, 0.1f, 32, light_vec, half_vec, normal), 1);
+}
+		]]>
+	</shader>
+
+	<technique name="Object">
+		<pass name="p0">
+			<state name="vertex_shader" value="ObjectVS()"/>
+			<state name="pixel_shader" value="ObjectPS()"/>
+		</pass>
+	</technique>
+</effect>

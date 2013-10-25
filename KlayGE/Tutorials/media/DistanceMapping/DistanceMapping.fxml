@@ -1,0 +1,136 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="util.fxml"/>
+	<include name="Lighting.fxml"/>
+	<include name="Quaternion.fxml"/>
+
+	<parameter type="float4x4" name="worldviewproj" semantic="WORLDVIEWPROJECTION"/>
+	<parameter type="float3" name="eye_pos"/>
+	<parameter type="float3" name="light_pos"/>
+	<parameter type="float3" name="light_color"/>
+	<parameter type="float3" name="light_falloff"/>
+
+	<parameter type="texture2D" name="diffuse_tex"/>
+	<parameter type="texture2D" name="normal_tex"/>
+	<parameter type="texture3D" name="distance_tex"/>
+
+	<parameter type="sampler" name="linear_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="wrap"/>
+		<state name="address_v" value="wrap"/>
+		<state name="address_w" value="clamp"/>
+	</parameter>
+
+	<shader>
+		<![CDATA[
+void DistanceMappingVS(float4 pos		: POSITION,
+					float2 texcoord0	: TEXCOORD0,
+					float4 tangent_quat	: TANGENT,	// in object space
+					
+					out float4 oL		: TEXCOORD0,	// in tangent space
+					out float4 oV		: TEXCOORD1,	// in tangent space
+					out float3 oH		: TEXCOORD2,	// in tangent space
+					out float4 oPos		: SV_Position)
+{
+	oPos = mul(pos, worldviewproj);
+
+	tangent_quat = tangent_quat * 2 - 1;
+
+	float3 vLight = light_pos - pos.xyz;
+	float3 vView = eye_pos - pos.xyz;
+	float3 vHalf = normalize(vLight) + normalize(vView);
+
+	oL.xyz = transform_quat(vLight, tangent_quat);
+	oV.xyz = transform_quat(vView, tangent_quat);
+	oH = transform_quat(vHalf, tangent_quat);
+	
+	oL.w = texcoord0.x;
+	oV.w = texcoord0.y;
+}
+
+float4 DistanceMappingShading(float3 L, float3 V, float3 H, float3 diffuse, float3 normal)
+{
+	float atten = attenuation_term(0, -L.xyz, light_falloff);
+	float3 light_vec = normalize(L);
+	float3 halfway_vec = normalize(H);
+	return float4(atten * light_color * calc_brdf(diffuse, 0.2f, 16, light_vec, halfway_vec, normal), 1);
+}
+
+float4 DistanceMappingPS(float4 L	: TEXCOORD0,
+						float4 V	: TEXCOORD1,
+						float3 H	: TEXCOORD2) : SV_Target
+{
+	float3 texCoord0 = float3(L.w, V.w, 1);
+	
+	float3 view = normalize(V.xyz) * float3(1, 1, 16) * 0.06;
+
+	float3 texUV = texCoord0;
+#if KLAYGE_MAX_TEX_DEPTH > 1
+	for (int i = 0; i < 8; ++ i)
+	{
+		texUV -= view * distance_tex.Sample(linear_sampler, texUV).r;
+	}
+#endif
+
+	if ((texUV.x < 0) || (texUV.y < 0) || (texUV.x > 1) || (texUV.y > 1))
+	{
+		discard;
+	}
+
+#if KLAYGE_DERIVATIVES
+	float2 dx = ddx(texCoord0.xy);
+	float2 dy = ddy(texCoord0.xy);
+
+	float3 diffuse = diffuse_tex.SampleGrad(linear_sampler, texUV.xy, dx, dy).rgb;
+	float3 bump_normal = decompress_normal(normal_tex.SampleGrad(linear_sampler, texUV.xy, dx, dy));
+#else
+	float3 diffuse = diffuse_tex.Sample(linear_sampler, texUV.xy).rgb;
+	float3 bump_normal = decompress_normal(normal_tex.Sample(linear_sampler, texUV.xy));
+#endif
+	return DistanceMappingShading(L.xyz, V.xyz, H.xyz, diffuse, bump_normal);
+}
+
+float4 DistanceMappingPS_20(float4 L	: TEXCOORD0,
+						float4 V		: TEXCOORD1,
+						float3 H		: TEXCOORD2) : SV_Target
+{
+	float3 texCoord0 = float3(L.w, V.w, 1);
+
+	float3 view = normalize(V.xyz) * float3(1, 1, 16) * 0.06;
+
+	float3 texUV = texCoord0;
+#if KLAYGE_MAX_TEX_DEPTH > 1
+	for (int i = 0; i < 2; ++ i)
+	{
+		texUV -= view * distance_tex.Sample(linear_sampler, texUV).r;
+	}
+#endif
+	
+	if ((texUV.x < 0) || (texUV.y < 0) || (texUV.x > 1) || (texUV.y > 1))
+	{
+		discard;
+	}
+
+	float3 diffuse = diffuse_tex.Sample(linear_sampler, texUV.xy).rgb;
+	float3 bump_normal = decompress_normal(normal_tex.Sample(linear_sampler, texUV.xy));
+	return DistanceMappingShading(L.xyz, V.xyz, H.xyz, diffuse, bump_normal);
+}
+		]]>
+	</shader>
+
+	<technique name="DistanceMapping2a">
+		<pass name="p0">
+			<state name="vertex_shader" value="DistanceMappingVS()"/>
+			<state name="pixel_shader" value="DistanceMappingPS()"/>
+		</pass>
+	</technique>
+
+	<technique name="DistanceMapping20">
+		<pass name="p0">
+			<state name="vertex_shader" value="DistanceMappingVS()"/>
+			<state name="pixel_shader" value="DistanceMappingPS_20()"/>
+		</pass>
+	</technique>
+</effect>
+

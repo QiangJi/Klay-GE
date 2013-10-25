@@ -1,0 +1,79 @@
+<?xml version='1.0'?>
+
+<effect>
+	<include name="PostProcess.fxml"/>
+	<include name="util.fxml"/>
+
+	<parameter type="sampler" name="point_clamp_sampler">
+		<state name="filtering" value="min_mag_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+	</parameter>
+	<parameter type="sampler" name="linear_clamp_sampler">
+		<state name="filtering" value="min_mag_linear_mip_point"/>
+		<state name="address_u" value="clamp"/>
+		<state name="address_v" value="clamp"/>
+		<state name="address_w" value="clamp"/>
+	</parameter>
+
+	<parameter type="int2" name="gamma_grading"/>
+	<parameter type="texture2D" name="src_tex"/>
+	<parameter type="texture3D" name="color_grading_tex">
+		<annotation type="string" name="SasResourceAddress" value="color_grading.dds"/>		
+	</parameter>
+
+	<shader>
+		<![CDATA[
+float3 SRGBCorrection(float3 rgb)
+{
+	return linear_to_srgb(max(rgb, 1e-6f));
+}
+
+float3 ColorGrading(float3 rgb)
+{
+	rgb = saturate(rgb);
+	
+	const float DIM = 16;
+	
+#if KLAYGE_MAX_TEX_DEPTH > 1
+	return color_grading_tex.Sample(linear_clamp_sampler, (rgb * (DIM - 1) + 0.5f) / DIM).xyz;
+#else
+	rgb.xy = (rgb.xy * (DIM - 1) + 0.5f) / DIM;
+	float slice = rgb.z * (DIM - 1);
+	float s = frac(slice);
+	slice -= s;
+	rgb.y = (rgb.y + slice) / DIM;
+
+	float3 col0 = color_grading_tex.Sample(linear_clamp_sampler, rgb.xy).xyz;
+ 	float3 col1 = color_grading_tex.Sample(linear_clamp_sampler, float2(rgb.x, rgb.y + 1.0f / DIM)).xyz;
+	return lerp(col0, col1, s);
+#endif
+}
+
+float4 ColorGradingPS(float2 tc : TEXCOORD0) : SV_Target
+{
+	float3 rgb = src_tex.Sample(point_clamp_sampler, tc).xyz;
+	if (gamma_grading.x)
+	{
+		rgb = SRGBCorrection(rgb);
+	}
+	if (gamma_grading.y)
+	{
+		rgb = ColorGrading(rgb);
+	}
+		
+	return float4(rgb, 1);
+}
+		]]>
+	</shader>
+
+	<technique name="ColorGrading">
+		<pass name="p0">
+			<state name="depth_enable" value="false"/>
+			<state name="depth_write_mask" value="false"/>
+
+			<state name="vertex_shader" value="PostProcessVS()"/>
+			<state name="pixel_shader" value="ColorGradingPS()"/>
+		</pass>
+	</technique>
+</effect>
